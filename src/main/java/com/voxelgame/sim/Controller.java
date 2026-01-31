@@ -9,10 +9,14 @@ import static org.lwjgl.glfw.GLFW.*;
 /**
  * Translates input events into player actions: movement, jumping,
  * camera rotation, fly mode toggle.
+ *
+ * In fly mode:  direct position manipulation (free-cam).
+ * In walk mode:  sets velocity; Physics integrates position.
  */
 public class Controller {
 
-    private static final float FLY_SPEED = 20.0f;
+    private static final float FLY_SPEED        = 20.0f;  // blocks/s
+    private static final float WALK_SPEED       = 4.3f;   // blocks/s (Minecraft-like)
     private static final float MOUSE_SENSITIVITY = 0.1f;
 
     private final Player player;
@@ -26,6 +30,8 @@ public class Controller {
         handleMovement(dt);
         handleModeToggles();
     }
+
+    // ---- Mouse look ----
 
     private void handleMouseLook() {
         if (!Input.isCursorLocked()) return;
@@ -41,12 +47,25 @@ public class Controller {
         }
     }
 
+    // ---- Movement ----
+
     private void handleMovement(float dt) {
         Camera camera = player.getCamera();
-        Vector3f pos = camera.getPosition();
         Vector3f front = camera.getFront();
         Vector3f right = camera.getRight();
 
+        if (player.isFlyMode()) {
+            handleFlyMovement(dt, front, right);
+        } else {
+            handleWalkMovement(dt, front, right);
+        }
+    }
+
+    /**
+     * Fly mode: move directly along camera vectors. No physics.
+     */
+    private void handleFlyMovement(float dt, Vector3f front, Vector3f right) {
+        Vector3f pos = player.getPosition();
         float speed = FLY_SPEED;
         if (Input.isKeyDown(GLFW_KEY_LEFT_SHIFT)) {
             speed *= 2.5f;
@@ -54,61 +73,13 @@ public class Controller {
 
         float moveX = 0, moveY = 0, moveZ = 0;
 
-        if (player.isFlyMode()) {
-            // In fly mode, move along camera direction
-            if (Input.isKeyDown(GLFW_KEY_W)) {
-                moveX += front.x;
-                moveY += front.y;
-                moveZ += front.z;
-            }
-            if (Input.isKeyDown(GLFW_KEY_S)) {
-                moveX -= front.x;
-                moveY -= front.y;
-                moveZ -= front.z;
-            }
-            if (Input.isKeyDown(GLFW_KEY_A)) {
-                moveX -= right.x;
-                moveY -= right.y;
-                moveZ -= right.z;
-            }
-            if (Input.isKeyDown(GLFW_KEY_D)) {
-                moveX += right.x;
-                moveY += right.y;
-                moveZ += right.z;
-            }
-            if (Input.isKeyDown(GLFW_KEY_SPACE)) {
-                moveY += 1.0f;
-            }
-            if (Input.isKeyDown(GLFW_KEY_LEFT_CONTROL)) {
-                moveY -= 1.0f;
-            }
-        } else {
-            // Non-fly: move on XZ plane
-            Vector3f flatFront = new Vector3f(front.x, 0, front.z).normalize();
-            Vector3f flatRight = new Vector3f(right.x, 0, right.z).normalize();
+        if (Input.isKeyDown(GLFW_KEY_W)) { moveX += front.x; moveY += front.y; moveZ += front.z; }
+        if (Input.isKeyDown(GLFW_KEY_S)) { moveX -= front.x; moveY -= front.y; moveZ -= front.z; }
+        if (Input.isKeyDown(GLFW_KEY_A)) { moveX -= right.x; moveY -= right.y; moveZ -= right.z; }
+        if (Input.isKeyDown(GLFW_KEY_D)) { moveX += right.x; moveY += right.y; moveZ += right.z; }
+        if (Input.isKeyDown(GLFW_KEY_SPACE))        moveY += 1.0f;
+        if (Input.isKeyDown(GLFW_KEY_LEFT_CONTROL)) moveY -= 1.0f;
 
-            if (Input.isKeyDown(GLFW_KEY_W)) {
-                moveX += flatFront.x;
-                moveZ += flatFront.z;
-            }
-            if (Input.isKeyDown(GLFW_KEY_S)) {
-                moveX -= flatFront.x;
-                moveZ -= flatFront.z;
-            }
-            if (Input.isKeyDown(GLFW_KEY_A)) {
-                moveX -= flatRight.x;
-                moveZ -= flatRight.z;
-            }
-            if (Input.isKeyDown(GLFW_KEY_D)) {
-                moveX += flatRight.x;
-                moveZ += flatRight.z;
-            }
-            if (Input.isKeyDown(GLFW_KEY_SPACE)) {
-                moveY += 1.0f;
-            }
-        }
-
-        // Normalize horizontal movement
         float len = (float) Math.sqrt(moveX * moveX + moveY * moveY + moveZ * moveZ);
         if (len > 0.001f) {
             float inv = 1.0f / len;
@@ -116,15 +87,57 @@ public class Controller {
             pos.y += moveY * inv * speed * dt;
             pos.z += moveZ * inv * speed * dt;
         }
+
+        // Fly mode doesn't use velocity
+        player.getVelocity().set(0);
     }
 
+    /**
+     * Walk mode: set horizontal velocity from input; Physics handles gravity & integration.
+     */
+    private void handleWalkMovement(float dt, Vector3f front, Vector3f right) {
+        Vector3f vel = player.getVelocity();
+
+        // Flat direction vectors (ignore camera pitch for horizontal movement)
+        Vector3f flatFront = new Vector3f(front.x, 0, front.z);
+        if (flatFront.lengthSquared() > 0.001f) flatFront.normalize();
+        Vector3f flatRight = new Vector3f(right.x, 0, right.z);
+        if (flatRight.lengthSquared() > 0.001f) flatRight.normalize();
+
+        float speed = WALK_SPEED;
+
+        float moveX = 0, moveZ = 0;
+        if (Input.isKeyDown(GLFW_KEY_W)) { moveX += flatFront.x; moveZ += flatFront.z; }
+        if (Input.isKeyDown(GLFW_KEY_S)) { moveX -= flatFront.x; moveZ -= flatFront.z; }
+        if (Input.isKeyDown(GLFW_KEY_A)) { moveX -= flatRight.x; moveZ -= flatRight.z; }
+        if (Input.isKeyDown(GLFW_KEY_D)) { moveX += flatRight.x; moveZ += flatRight.z; }
+
+        float len = (float) Math.sqrt(moveX * moveX + moveZ * moveZ);
+        if (len > 0.001f) {
+            float inv = 1.0f / len;
+            vel.x = moveX * inv * speed;
+            vel.z = moveZ * inv * speed;
+        } else {
+            vel.x = 0;
+            vel.z = 0;
+        }
+
+        // Jump
+        if (Input.isKeyDown(GLFW_KEY_SPACE)) {
+            player.jump();
+        }
+    }
+
+    // ---- Mode toggles ----
+
     private void handleModeToggles() {
+        // F3 = toggle fly mode
         if (Input.isKeyPressed(GLFW_KEY_F3)) {
             player.toggleFlyMode();
             System.out.println("Fly mode: " + (player.isFlyMode() ? "ON" : "OFF"));
         }
 
-        // ESC to toggle cursor lock
+        // ESC = toggle cursor lock
         if (Input.isKeyPressed(GLFW_KEY_ESCAPE)) {
             if (Input.isCursorLocked()) {
                 Input.unlockCursor();

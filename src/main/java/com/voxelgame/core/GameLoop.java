@@ -5,6 +5,7 @@ import com.voxelgame.platform.Window;
 import com.voxelgame.render.GLInit;
 import com.voxelgame.render.Renderer;
 import com.voxelgame.sim.Controller;
+import com.voxelgame.sim.Physics;
 import com.voxelgame.sim.Player;
 import com.voxelgame.world.Raycast;
 import com.voxelgame.world.World;
@@ -21,6 +22,7 @@ public class GameLoop {
     private Time time;
     private Player player;
     private Controller controller;
+    private Physics physics;
     private World world;
     private ChunkManager chunkManager;
     private Renderer renderer;
@@ -41,6 +43,7 @@ public class GameLoop {
 
         player = new Player();
         controller = new Controller(player);
+        physics = new Physics();
 
         Input.init(window.getHandle());
         Input.lockCursor();
@@ -69,16 +72,17 @@ public class GameLoop {
                 GLInit.setViewport(window.getWidth(), window.getHeight());
             }
 
-            // Update
+            // ---- Update ----
             controller.update(dt);
+            physics.step(player, dt);
             chunkManager.update(player);
             handleBlockInteraction();
 
-            // Render
+            // ---- Render ----
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             renderer.render(player.getCamera(), window.getWidth(), window.getHeight());
 
-            // End frame
+            // ---- End frame ----
             Input.endFrame();
             window.swapBuffers();
         }
