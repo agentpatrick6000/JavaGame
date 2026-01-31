@@ -2,6 +2,7 @@ package com.voxelgame.core;
 
 import com.voxelgame.platform.Input;
 import com.voxelgame.platform.Window;
+import com.voxelgame.render.BlockHighlight;
 import com.voxelgame.render.GLInit;
 import com.voxelgame.render.Renderer;
 import com.voxelgame.sim.Controller;
@@ -40,6 +41,10 @@ public class GameLoop {
     private Hud hud;
     private BitmapFont bitmapFont;
     private DebugOverlay debugOverlay;
+    private BlockHighlight blockHighlight;
+
+    // Current raycast hit (updated each frame)
+    private Raycast.HitResult currentHit;
 
     public void run() {
         init();
@@ -76,6 +81,8 @@ public class GameLoop {
         bitmapFont = new BitmapFont();
         bitmapFont.init();
         debugOverlay = new DebugOverlay(bitmapFont);
+        blockHighlight = new BlockHighlight();
+        blockHighlight.init();
 
         // Find spawn point and position player
         GenPipeline pipeline = chunkManager.getPipeline();
@@ -113,15 +120,26 @@ public class GameLoop {
             controller.update(dt);
             physics.step(player, dt);
             chunkManager.update(player);
+
+            // Raycast every frame for block highlight
+            currentHit = Raycast.cast(
+                world, player.getCamera().getPosition(), player.getCamera().getFront(), 8.0f
+            );
             handleBlockInteraction();
 
             // ---- Render 3D ----
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            renderer.render(player.getCamera(), window.getWidth(), window.getHeight());
-
-            // ---- Render UI overlay ----
             int w = window.getWidth();
             int h = window.getHeight();
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            renderer.render(player.getCamera(), w, h);
+
+            // ---- Block highlight ----
+            if (currentHit != null) {
+                blockHighlight.render(player.getCamera(), w, h,
+                    currentHit.x(), currentHit.y(), currentHit.z());
+            }
+
+            // ---- Render UI overlay ----
             hud.render(w, h, player);
             debugOverlay.render(player, world, time.getFps(), w, h, controller.isSprinting());
 
@@ -134,38 +152,27 @@ public class GameLoop {
     private void handleBlockInteraction() {
         if (!Input.isCursorLocked()) return;
 
-        if (Input.isLeftMouseClicked()) {
-            var hit = Raycast.cast(
-                world, player.getCamera().getPosition(), player.getCamera().getFront(), 8.0f
-            );
-            if (hit != null) {
-                world.setBlock(hit.x(), hit.y(), hit.z(), 0); // AIR
-                // Recalculate lighting — light floods into the opened space
-                Set<ChunkPos> affected = Lighting.onBlockRemoved(world, hit.x(), hit.y(), hit.z());
-                chunkManager.rebuildMeshAt(hit.x(), hit.y(), hit.z());
-                chunkManager.rebuildChunks(affected);
-            }
+        if (Input.isLeftMouseClicked() && currentHit != null) {
+            world.setBlock(currentHit.x(), currentHit.y(), currentHit.z(), 0); // AIR
+            Set<ChunkPos> affected = Lighting.onBlockRemoved(world, currentHit.x(), currentHit.y(), currentHit.z());
+            chunkManager.rebuildMeshAt(currentHit.x(), currentHit.y(), currentHit.z());
+            chunkManager.rebuildChunks(affected);
         }
 
-        if (Input.isRightMouseClicked()) {
-            var hit = Raycast.cast(
-                world, player.getCamera().getPosition(), player.getCamera().getFront(), 8.0f
-            );
-            if (hit != null) {
-                int px = hit.x() + hit.nx();
-                int py = hit.y() + hit.ny();
-                int pz = hit.z() + hit.nz();
-                world.setBlock(px, py, pz, player.getSelectedBlock());
-                // Recalculate lighting — block now casts shadow
-                Set<ChunkPos> affected = Lighting.onBlockPlaced(world, px, py, pz);
-                chunkManager.rebuildMeshAt(px, py, pz);
-                chunkManager.rebuildChunks(affected);
-            }
+        if (Input.isRightMouseClicked() && currentHit != null) {
+            int px = currentHit.x() + currentHit.nx();
+            int py = currentHit.y() + currentHit.ny();
+            int pz = currentHit.z() + currentHit.nz();
+            world.setBlock(px, py, pz, player.getSelectedBlock());
+            Set<ChunkPos> affected = Lighting.onBlockPlaced(world, px, py, pz);
+            chunkManager.rebuildMeshAt(px, py, pz);
+            chunkManager.rebuildChunks(affected);
         }
     }
 
     private void cleanup() {
         chunkManager.shutdown();
+        if (blockHighlight != null) blockHighlight.cleanup();
         if (bitmapFont != null) bitmapFont.cleanup();
         if (hud != null) hud.cleanup();
         renderer.cleanup();
