@@ -5,6 +5,8 @@ import com.voxelgame.platform.Window;
 import com.voxelgame.render.BlockHighlight;
 import com.voxelgame.render.GLInit;
 import com.voxelgame.render.Renderer;
+import com.voxelgame.save.SaveManager;
+import com.voxelgame.save.WorldMeta;
 import com.voxelgame.sim.Controller;
 import com.voxelgame.sim.Physics;
 import com.voxelgame.sim.Player;
@@ -17,8 +19,10 @@ import com.voxelgame.world.Raycast;
 import com.voxelgame.world.World;
 import com.voxelgame.world.gen.GenPipeline;
 import com.voxelgame.world.gen.SpawnPointFinder;
+import com.voxelgame.world.stream.ChunkGenerationWorker;
 import com.voxelgame.world.stream.ChunkManager;
 
+import java.io.IOException;
 import java.util.Set;
 
 import static org.lwjgl.opengl.GL33.*;
@@ -28,6 +32,9 @@ import static org.lwjgl.opengl.GL33.*;
  */
 public class GameLoop {
 
+    private static final String WORLD_NAME = "default";
+    private static final float AUTO_SAVE_INTERVAL = 60.0f; // seconds
+
     private Window window;
     private Time time;
     private Player player;
@@ -36,6 +43,7 @@ public class GameLoop {
     private World world;
     private ChunkManager chunkManager;
     private Renderer renderer;
+    private SaveManager saveManager;
 
     // UI
     private Hud hud;
@@ -45,6 +53,9 @@ public class GameLoop {
 
     // Current raycast hit (updated each frame)
     private Raycast.HitResult currentHit;
+
+    // Auto-save timer
+    private float autoSaveTimer = 0;
 
     public void run() {
         init();
@@ -72,8 +83,73 @@ public class GameLoop {
         renderer = new Renderer(world);
         renderer.init();
 
+        // Initialize save system
+        saveManager = new SaveManager(WORLD_NAME);
+
         chunkManager = new ChunkManager(world);
-        chunkManager.init(renderer.getAtlas());
+        chunkManager.setSaveManager(saveManager);
+
+        // Load or create world
+        long seed;
+        boolean loadedFromSave = false;
+
+        if (saveManager.worldExists()) {
+            // Load existing world
+            try {
+                WorldMeta meta = saveManager.loadMeta();
+                if (meta != null) {
+                    seed = meta.getSeed();
+                    chunkManager.setSeed(seed);
+                    chunkManager.init(renderer.getAtlas());
+
+                    // Restore player position and rotation
+                    player.getCamera().getPosition().set(
+                        meta.getPlayerX(), meta.getPlayerY(), meta.getPlayerZ()
+                    );
+                    player.getCamera().setYaw(meta.getPlayerYaw());
+                    player.getCamera().setPitch(meta.getPlayerPitch());
+
+                    loadedFromSave = true;
+                    System.out.println("Loaded world '" + WORLD_NAME + "' (seed=" + seed + ")");
+                    System.out.println("  Player position: " +
+                        meta.getPlayerX() + ", " + meta.getPlayerY() + ", " + meta.getPlayerZ());
+                }
+            } catch (IOException e) {
+                System.err.println("Failed to load world meta, creating new world: " + e.getMessage());
+            }
+        }
+
+        if (!loadedFromSave) {
+            // Create new world
+            seed = ChunkGenerationWorker.DEFAULT_SEED;
+            chunkManager.setSeed(seed);
+            chunkManager.init(renderer.getAtlas());
+
+            // Find spawn point
+            GenPipeline pipeline = chunkManager.getPipeline();
+            if (pipeline != null) {
+                SpawnPointFinder.SpawnPoint spawn = SpawnPointFinder.find(pipeline.getContext());
+                player.getCamera().getPosition().set(
+                    (float) spawn.x(), (float) spawn.y(), (float) spawn.z()
+                );
+                System.out.println("New world — Spawn point: " + spawn.x() + ", " + spawn.y() + ", " + spawn.z());
+            }
+
+            // Save initial metadata
+            try {
+                WorldMeta meta = new WorldMeta(seed);
+                meta.setPlayerPosition(
+                    player.getPosition().x, player.getPosition().y, player.getPosition().z
+                );
+                meta.setPlayerRotation(
+                    player.getCamera().getYaw(), player.getCamera().getPitch()
+                );
+                saveManager.saveMeta(meta);
+                System.out.println("Created new world '" + WORLD_NAME + "' (seed=" + seed + ")");
+            } catch (IOException e) {
+                System.err.println("Failed to save initial world meta: " + e.getMessage());
+            }
+        }
 
         // UI
         hud = new Hud();
@@ -83,16 +159,6 @@ public class GameLoop {
         debugOverlay = new DebugOverlay(bitmapFont);
         blockHighlight = new BlockHighlight();
         blockHighlight.init();
-
-        // Find spawn point and position player
-        GenPipeline pipeline = chunkManager.getPipeline();
-        if (pipeline != null) {
-            SpawnPointFinder.SpawnPoint spawn = SpawnPointFinder.find(pipeline.getContext());
-            player.getCamera().getPosition().set(
-                (float) spawn.x(), (float) spawn.y(), (float) spawn.z()
-            );
-            System.out.println("Spawn point: " + spawn.x() + ", " + spawn.y() + ", " + spawn.z());
-        }
 
         // Initial chunk load
         chunkManager.update(player);
@@ -126,6 +192,13 @@ public class GameLoop {
                 world, player.getCamera().getPosition(), player.getCamera().getFront(), 8.0f
             );
             handleBlockInteraction();
+
+            // ---- Auto-save ----
+            autoSaveTimer += dt;
+            if (autoSaveTimer >= AUTO_SAVE_INTERVAL) {
+                autoSaveTimer = 0;
+                performAutoSave();
+            }
 
             // ---- Render 3D ----
             int w = window.getWidth();
@@ -170,7 +243,55 @@ public class GameLoop {
         }
     }
 
+    /**
+     * Auto-save: save modified chunks and player position.
+     */
+    private void performAutoSave() {
+        try {
+            int saved = saveManager.saveModifiedChunks(world);
+            savePlayerMeta();
+            if (saved > 0) {
+                System.out.println("Auto-saved " + saved + " chunks");
+            }
+        } catch (Exception e) {
+            System.err.println("Auto-save failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Save the current player position and rotation to world metadata.
+     */
+    private void savePlayerMeta() {
+        try {
+            WorldMeta meta = saveManager.loadMeta();
+            if (meta == null) {
+                meta = new WorldMeta(ChunkGenerationWorker.DEFAULT_SEED);
+            }
+            meta.setPlayerPosition(
+                player.getPosition().x, player.getPosition().y, player.getPosition().z
+            );
+            meta.setPlayerRotation(
+                player.getCamera().getYaw(), player.getCamera().getPitch()
+            );
+            meta.setLastPlayedAt(System.currentTimeMillis());
+            saveManager.saveMeta(meta);
+        } catch (IOException e) {
+            System.err.println("Failed to save player meta: " + e.getMessage());
+        }
+    }
+
     private void cleanup() {
+        // Save everything on exit
+        System.out.println("Saving world on exit...");
+        try {
+            int saved = saveManager.saveAllChunks(world);
+            savePlayerMeta();
+            System.out.println("Saved " + saved + " chunks on exit");
+        } catch (Exception e) {
+            System.err.println("Failed to save on exit: " + e.getMessage());
+        }
+        saveManager.close();
+
         chunkManager.shutdown();
         if (blockHighlight != null) blockHighlight.cleanup();
         if (bitmapFont != null) bitmapFont.cleanup();

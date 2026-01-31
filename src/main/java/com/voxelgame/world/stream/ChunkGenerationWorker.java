@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class ChunkGenerationWorker implements Runnable {
 
-    private static final long WORLD_SEED = 12345L;
+    public static final long DEFAULT_SEED = 12345L;
 
     private final BlockingQueue<ChunkTask> taskQueue;
     private final ConcurrentLinkedQueue<ChunkTask> completedQueue;
@@ -21,10 +21,17 @@ public class ChunkGenerationWorker implements Runnable {
     private volatile boolean running = true;
 
     public ChunkGenerationWorker(BlockingQueue<ChunkTask> taskQueue,
-                                  ConcurrentLinkedQueue<ChunkTask> completedQueue) {
+                                  ConcurrentLinkedQueue<ChunkTask> completedQueue,
+                                  long seed) {
         this.taskQueue = taskQueue;
         this.completedQueue = completedQueue;
-        this.pipeline = GenPipeline.createDefault(WORLD_SEED);
+        this.pipeline = GenPipeline.createDefault(seed);
+    }
+
+    /** Backward-compatible constructor using the default seed. */
+    public ChunkGenerationWorker(BlockingQueue<ChunkTask> taskQueue,
+                                  ConcurrentLinkedQueue<ChunkTask> completedQueue) {
+        this(taskQueue, completedQueue, DEFAULT_SEED);
     }
 
     /** Get the pipeline (for spawn point finding). */

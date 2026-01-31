@@ -1,6 +1,7 @@
 package com.voxelgame.world.stream;
 
 import com.voxelgame.render.TextureAtlas;
+import com.voxelgame.save.SaveManager;
 import com.voxelgame.sim.Player;
 import com.voxelgame.world.*;
 import com.voxelgame.world.gen.GenPipeline;
@@ -14,6 +15,7 @@ import java.util.concurrent.*;
 /**
  * Manages chunk lifecycle: loading, generation, meshing, and unloading.
  * Coordinates background worker and maintains load radius around the player.
+ * Integrates with SaveManager to load saved chunks from disk before generating.
  */
 public class ChunkManager {
 
@@ -33,14 +35,30 @@ public class ChunkManager {
     private int lastPlayerCX = Integer.MIN_VALUE;
     private int lastPlayerCZ = Integer.MIN_VALUE;
 
+    /** Save manager for loading chunks from disk. May be null if save is disabled. */
+    private SaveManager saveManager;
+
+    /** Seed to use for world generation. */
+    private long seed = ChunkGenerationWorker.DEFAULT_SEED;
+
     public ChunkManager(World world) {
         this.world = world;
+    }
+
+    /** Set the save manager (call before init). */
+    public void setSaveManager(SaveManager saveManager) {
+        this.saveManager = saveManager;
+    }
+
+    /** Set the world seed (call before init). */
+    public void setSeed(long seed) {
+        this.seed = seed;
     }
 
     public void init(TextureAtlas atlas) {
         this.mesher = new NaiveMesher(atlas);
 
-        worker = new ChunkGenerationWorker(taskQueue, completedQueue);
+        worker = new ChunkGenerationWorker(taskQueue, completedQueue, seed);
         workerThread = new Thread(worker, "ChunkGen-Worker");
         workerThread.setDaemon(true);
         workerThread.start();
@@ -87,6 +105,19 @@ public class ChunkManager {
                 if (dx * dx + dz * dz > RENDER_DISTANCE * RENDER_DISTANCE) continue;
                 ChunkPos pos = new ChunkPos(pcx + dx, pcz + dz);
                 if (!world.isLoaded(pos.x(), pos.z()) && !pendingChunks.contains(pos)) {
+                    // Try loading from disk first
+                    if (saveManager != null) {
+                        Chunk loaded = saveManager.loadChunk(pos.x(), pos.z());
+                        if (loaded != null) {
+                            // Loaded from disk — add directly (skip generation)
+                            world.addChunk(pos, loaded);
+                            Lighting.computeInitialSkyLight(loaded, world);
+                            buildMesh(loaded);
+                            rebuildNeighborMeshes(pos);
+                            continue;
+                        }
+                    }
+                    // Not on disk — queue for generation
                     pendingChunks.add(pos);
                     taskQueue.add(new ChunkTask(pos));
                 }
@@ -104,6 +135,17 @@ public class ChunkManager {
             }
         }
         for (ChunkPos pos : toRemove) {
+            // Save modified chunks before unloading
+            if (saveManager != null) {
+                Chunk chunk = world.getChunk(pos.x(), pos.z());
+                if (chunk != null && chunk.isModified()) {
+                    try {
+                        saveManager.saveChunk(chunk);
+                    } catch (java.io.IOException e) {
+                        System.err.println("Failed to save chunk on unload: " + pos);
+                    }
+                }
+            }
             world.removeChunk(pos);
         }
     }
