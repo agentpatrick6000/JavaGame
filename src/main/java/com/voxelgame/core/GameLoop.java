@@ -12,6 +12,8 @@ import com.voxelgame.ui.DebugOverlay;
 import com.voxelgame.ui.Hud;
 import com.voxelgame.world.Raycast;
 import com.voxelgame.world.World;
+import com.voxelgame.world.gen.GenPipeline;
+import com.voxelgame.world.gen.SpawnPointFinder;
 import com.voxelgame.world.stream.ChunkManager;
 
 import static org.lwjgl.opengl.GL33.*;
@@ -70,6 +72,16 @@ public class GameLoop {
         bitmapFont = new BitmapFont();
         bitmapFont.init();
         debugOverlay = new DebugOverlay(bitmapFont);
+
+        // Find spawn point and position player
+        GenPipeline pipeline = chunkManager.getPipeline();
+        if (pipeline != null) {
+            SpawnPointFinder.SpawnPoint spawn = SpawnPointFinder.find(pipeline.getContext());
+            player.getCamera().getPosition().set(
+                (float) spawn.x(), (float) spawn.y(), (float) spawn.z()
+            );
+            System.out.println("Spawn point: " + spawn.x() + ", " + spawn.y() + ", " + spawn.z());
+        }
 
         // Initial chunk load
         chunkManager.update(player);

@@ -3,6 +3,7 @@ package com.voxelgame.world.stream;
 import com.voxelgame.render.TextureAtlas;
 import com.voxelgame.sim.Player;
 import com.voxelgame.world.*;
+import com.voxelgame.world.gen.GenPipeline;
 import com.voxelgame.world.mesh.ChunkMesh;
 import com.voxelgame.world.mesh.Mesher;
 import com.voxelgame.world.mesh.NaiveMesher;
@@ -135,6 +136,11 @@ public class ChunkManager {
         if (chunk != null) {
             buildMesh(chunk);
         }
+    }
+
+    /** Get the generation pipeline (for spawn point finding, etc.) */
+    public GenPipeline getPipeline() {
+        return worker != null ? worker.getPipeline() : null;
     }
 
     public void shutdown() {
