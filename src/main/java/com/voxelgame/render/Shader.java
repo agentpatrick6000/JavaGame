@@ -98,6 +98,14 @@ public class Shader {
         glUniform1f(getUniformLocation(name), value);
     }
 
+    public void setVec4(String name, float x, float y, float z, float w) {
+        glUniform4f(getUniformLocation(name), x, y, z, w);
+    }
+
+    public void setVec2(String name, float x, float y) {
+        glUniform2f(getUniformLocation(name), x, y);
+    }
+
     public void cleanup() {
         glDeleteProgram(programId);
     }

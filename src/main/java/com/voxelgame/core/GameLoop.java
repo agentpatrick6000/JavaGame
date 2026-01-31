@@ -7,6 +7,9 @@ import com.voxelgame.render.Renderer;
 import com.voxelgame.sim.Controller;
 import com.voxelgame.sim.Physics;
 import com.voxelgame.sim.Player;
+import com.voxelgame.ui.BitmapFont;
+import com.voxelgame.ui.DebugOverlay;
+import com.voxelgame.ui.Hud;
 import com.voxelgame.world.Raycast;
 import com.voxelgame.world.World;
 import com.voxelgame.world.stream.ChunkManager;
@@ -26,6 +29,11 @@ public class GameLoop {
     private World world;
     private ChunkManager chunkManager;
     private Renderer renderer;
+
+    // UI
+    private Hud hud;
+    private BitmapFont bitmapFont;
+    private DebugOverlay debugOverlay;
 
     public void run() {
         init();
@@ -56,6 +64,13 @@ public class GameLoop {
         chunkManager = new ChunkManager(world);
         chunkManager.init(renderer.getAtlas());
 
+        // UI
+        hud = new Hud();
+        hud.init();
+        bitmapFont = new BitmapFont();
+        bitmapFont.init();
+        debugOverlay = new DebugOverlay(bitmapFont);
+
         // Initial chunk load
         chunkManager.update(player);
 
@@ -73,15 +88,26 @@ public class GameLoop {
                 GLInit.setViewport(window.getWidth(), window.getHeight());
             }
 
+            // ---- Handle debug toggle (F3) ----
+            if (Input.isKeyPressed(org.lwjgl.glfw.GLFW.GLFW_KEY_F3)) {
+                debugOverlay.toggle();
+            }
+
             // ---- Update ----
             controller.update(dt);
             physics.step(player, dt);
             chunkManager.update(player);
             handleBlockInteraction();
 
-            // ---- Render ----
+            // ---- Render 3D ----
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             renderer.render(player.getCamera(), window.getWidth(), window.getHeight());
+
+            // ---- Render UI overlay ----
+            int w = window.getWidth();
+            int h = window.getHeight();
+            hud.render(w, h);
+            debugOverlay.render(player, world, time.getFps(), w, h);
 
             // ---- End frame ----
             Input.endFrame();
@@ -118,6 +144,8 @@ public class GameLoop {
 
     private void cleanup() {
         chunkManager.shutdown();
+        if (bitmapFont != null) bitmapFont.cleanup();
+        if (hud != null) hud.cleanup();
         renderer.cleanup();
         window.destroy();
     }
