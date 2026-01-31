@@ -58,9 +58,14 @@ public class ChunkManager {
             Chunk chunk = completed.getResult();
             if (chunk != null) {
                 world.addChunk(pos, chunk);
+                // Compute initial sky light for the new chunk
+                Lighting.computeInitialSkyLight(chunk, world);
                 buildMesh(chunk);
                 meshesBuilt++;
                 pendingChunks.remove(pos);
+
+                // Rebuild neighbor meshes so they pick up cross-boundary lighting
+                rebuildNeighborMeshes(pos);
             }
         }
 
@@ -109,6 +114,16 @@ public class ChunkManager {
         chunk.setDirty(false);
     }
 
+    private void rebuildNeighborMeshes(ChunkPos pos) {
+        int[][] neighbors = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+        for (int[] n : neighbors) {
+            Chunk neighbor = world.getChunk(pos.x() + n[0], pos.z() + n[1]);
+            if (neighbor != null && neighbor.getMesh() != null) {
+                buildMesh(neighbor);
+            }
+        }
+    }
+
     /**
      * Rebuild mesh for the chunk containing the given world coordinates.
      * Also rebuilds neighbor chunks if the block is on a chunk boundary.
@@ -131,6 +146,18 @@ public class ChunkManager {
         if (lz == WorldConstants.CHUNK_SIZE - 1) rebuildChunk(cx, cz + 1);
     }
 
+    /**
+     * Rebuild meshes for all chunks in the given set.
+     */
+    public void rebuildChunks(Set<ChunkPos> positions) {
+        for (ChunkPos pos : positions) {
+            Chunk chunk = world.getChunk(pos.x(), pos.z());
+            if (chunk != null) {
+                buildMesh(chunk);
+            }
+        }
+    }
+
     private void rebuildChunk(int cx, int cz) {
         Chunk chunk = world.getChunk(cx, cz);
         if (chunk != null) {
@@ -141,6 +168,10 @@ public class ChunkManager {
     /** Get the generation pipeline (for spawn point finding, etc.) */
     public GenPipeline getPipeline() {
         return worker != null ? worker.getPipeline() : null;
+    }
+
+    public World getWorld() {
+        return world;
     }
 
     public void shutdown() {
