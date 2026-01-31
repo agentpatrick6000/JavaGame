@@ -10,11 +10,15 @@ import com.voxelgame.sim.Player;
 import com.voxelgame.ui.BitmapFont;
 import com.voxelgame.ui.DebugOverlay;
 import com.voxelgame.ui.Hud;
+import com.voxelgame.world.ChunkPos;
+import com.voxelgame.world.Lighting;
 import com.voxelgame.world.Raycast;
 import com.voxelgame.world.World;
 import com.voxelgame.world.gen.GenPipeline;
 import com.voxelgame.world.gen.SpawnPointFinder;
 import com.voxelgame.world.stream.ChunkManager;
+
+import java.util.Set;
 
 import static org.lwjgl.opengl.GL33.*;
 
@@ -136,7 +140,10 @@ public class GameLoop {
             );
             if (hit != null) {
                 world.setBlock(hit.x(), hit.y(), hit.z(), 0); // AIR
+                // Recalculate lighting — light floods into the opened space
+                Set<ChunkPos> affected = Lighting.onBlockRemoved(world, hit.x(), hit.y(), hit.z());
                 chunkManager.rebuildMeshAt(hit.x(), hit.y(), hit.z());
+                chunkManager.rebuildChunks(affected);
             }
         }
 
@@ -149,7 +156,10 @@ public class GameLoop {
                 int py = hit.y() + hit.ny();
                 int pz = hit.z() + hit.nz();
                 world.setBlock(px, py, pz, player.getSelectedBlock());
+                // Recalculate lighting — block now casts shadow
+                Set<ChunkPos> affected = Lighting.onBlockPlaced(world, px, py, pz);
                 chunkManager.rebuildMeshAt(px, py, pz);
+                chunkManager.rebuildChunks(affected);
             }
         }
     }
