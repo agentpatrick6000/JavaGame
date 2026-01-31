@@ -16,6 +16,13 @@ public class Chunk {
     private boolean lightDirty = true;
     private ChunkMesh mesh;
 
+    /**
+     * Whether this chunk has been modified by the player (block placed/removed)
+     * since the last save. Used by the save system to know which chunks need persisting.
+     * Separate from {@link #dirty} which tracks mesh rebuild need.
+     */
+    private volatile boolean modified = false;
+
     public Chunk(ChunkPos pos) {
         this.pos = pos;
         this.blocks = new byte[WorldConstants.CHUNK_VOLUME];
@@ -43,6 +50,7 @@ public class Chunk {
         }
         blocks[index(x, y, z)] = (byte) blockId;
         dirty = true;
+        modified = true;
     }
 
     /** Get sky light level (0-15) at local coordinates. */
@@ -92,6 +100,53 @@ public class Chunk {
     public boolean isLightDirty() { return lightDirty; }
     public void setLightDirty(boolean d) { this.lightDirty = d; }
     public ChunkPos getPos() { return pos; }
+
+    // --- Modified flag for save system ---
+
+    /** Whether block data has been modified since last save. */
+    public boolean isModified() { return modified; }
+    public void setModified(boolean m) { this.modified = m; }
+
+    // --- Raw array access for serialization (copy-on-read for thread safety) ---
+
+    /**
+     * Returns a snapshot copy of the block data array.
+     * Thread-safe: caller gets an independent copy.
+     */
+    public byte[] snapshotBlocks() {
+        byte[] copy = new byte[blocks.length];
+        System.arraycopy(blocks, 0, copy, 0, blocks.length);
+        return copy;
+    }
+
+    /**
+     * Returns a snapshot copy of the light map array.
+     * Thread-safe: caller gets an independent copy.
+     */
+    public byte[] snapshotLightMap() {
+        byte[] copy = new byte[lightMap.length];
+        System.arraycopy(lightMap, 0, copy, 0, lightMap.length);
+        return copy;
+    }
+
+    /**
+     * Bulk-load block data from a saved byte array.
+     * Used when loading a chunk from disk.
+     */
+    public void loadBlocks(byte[] data) {
+        int len = Math.min(data.length, blocks.length);
+        System.arraycopy(data, 0, blocks, 0, len);
+        dirty = true;
+    }
+
+    /**
+     * Bulk-load light map data from a saved byte array.
+     */
+    public void loadLightMap(byte[] data) {
+        int len = Math.min(data.length, lightMap.length);
+        System.arraycopy(data, 0, lightMap, 0, len);
+        lightDirty = true;
+    }
 
     public ChunkMesh getMesh() { return mesh; }
     public void setMesh(ChunkMesh mesh) {
