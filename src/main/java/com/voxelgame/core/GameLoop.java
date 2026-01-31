@@ -122,7 +122,7 @@ public class GameLoop {
             // ---- Render UI overlay ----
             int w = window.getWidth();
             int h = window.getHeight();
-            hud.render(w, h);
+            hud.render(w, h, player);
             debugOverlay.render(player, world, time.getFps(), w, h, controller.isSprinting());
 
             // ---- End frame ----

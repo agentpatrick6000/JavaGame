@@ -19,6 +19,10 @@ public class Input {
     private static boolean leftMouseClicked = false;
     private static boolean rightMouseClicked = false;
 
+    // Scroll wheel
+    private static double scrollDX = 0;
+    private static double scrollDY = 0;
+
     public static void init(long handle) {
         windowHandle = handle;
 
@@ -43,6 +47,11 @@ public class Input {
             mouseDY += ypos - mouseY;
             mouseX = xpos;
             mouseY = ypos;
+        });
+
+        glfwSetScrollCallback(handle, (window, xoffset, yoffset) -> {
+            scrollDX += xoffset;
+            scrollDY += yoffset;
         });
 
         glfwSetMouseButtonCallback(handle, (window, button, action, mods) -> {
@@ -94,9 +103,14 @@ public class Input {
     public static boolean isLeftMouseDown() { return leftMouseDown; }
     public static boolean isRightMouseDown() { return rightMouseDown; }
 
+    public static double getScrollDX() { return scrollDX; }
+    public static double getScrollDY() { return scrollDY; }
+
     public static void endFrame() {
         mouseDX = 0;
         mouseDY = 0;
+        scrollDX = 0;
+        scrollDY = 0;
         leftMouseClicked = false;
         rightMouseClicked = false;
         java.util.Arrays.fill(keysPressed, false);

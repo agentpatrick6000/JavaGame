@@ -49,6 +49,7 @@ public class Controller {
         handleMouseLook();
         handleMovement(dt);
         handleModeToggles();
+        handleHotbar();
     }
 
     public boolean isSprinting() {
@@ -184,6 +185,23 @@ public class Controller {
         // Jump
         if (Input.isKeyDown(GLFW_KEY_SPACE)) {
             player.jump();
+        }
+    }
+
+    // ---- Hotbar selection ----
+
+    private void handleHotbar() {
+        // Number keys 1-9 select hotbar slots
+        for (int i = 0; i < 9; i++) {
+            if (Input.isKeyPressed(GLFW_KEY_1 + i)) {
+                player.setSelectedSlot(i);
+            }
+        }
+
+        // Scroll wheel cycles through slots
+        double scrollY = Input.getScrollDY();
+        if (scrollY != 0) {
+            player.cycleSelectedSlot((int) Math.signum(scrollY));
         }
     }
 
