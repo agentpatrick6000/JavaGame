@@ -49,6 +49,7 @@ public class GameLoop {
         Input.lockCursor();
 
         world = new World();
+        physics.setWorld(world);
         renderer = new Renderer(world);
         renderer.init();
 
