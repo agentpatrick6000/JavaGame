@@ -20,12 +20,11 @@ public class ChunkMesh {
     private boolean uploaded = false;
 
     /**
-     * Upload mesh data to GPU.
+     * Upload mesh data to GPU with explicit index array.
      * Vertex format: [x, y, z, u, v, light] per vertex.
-     * Quads are turned into triangles via index buffer.
      */
-    public void upload(float[] vertices, int quadCount) {
-        if (quadCount == 0) {
+    public void upload(float[] vertices, int[] indices) {
+        if (indices.length == 0) {
             indexCount = 0;
             return;
         }
@@ -45,15 +44,10 @@ public class ChunkMesh {
         glBufferData(GL_ARRAY_BUFFER, vertBuf, GL_DYNAMIC_DRAW);
         MemoryUtil.memFree(vertBuf);
 
-        // Generate indices for quads -> triangles
-        indexCount = quadCount * 6;
+        // Upload index data
+        indexCount = indices.length;
         IntBuffer idxBuf = MemoryUtil.memAllocInt(indexCount);
-        for (int i = 0; i < quadCount; i++) {
-            int base = i * 4;
-            idxBuf.put(base).put(base + 1).put(base + 2);
-            idxBuf.put(base).put(base + 2).put(base + 3);
-        }
-        idxBuf.flip();
+        idxBuf.put(indices).flip();
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, idxBuf, GL_DYNAMIC_DRAW);
         MemoryUtil.memFree(idxBuf);
@@ -74,6 +68,30 @@ public class ChunkMesh {
 
         glBindVertexArray(0);
         uploaded = true;
+    }
+
+    /**
+     * Legacy upload for quad-count based meshes (auto-generates indices).
+     * Vertex format: [x, y, z, u, v, light] per vertex.
+     * Quads are turned into triangles via index buffer.
+     */
+    public void upload(float[] vertices, int quadCount) {
+        if (quadCount == 0) {
+            indexCount = 0;
+            return;
+        }
+
+        int[] indices = new int[quadCount * 6];
+        for (int i = 0; i < quadCount; i++) {
+            int base = i * 4;
+            indices[i * 6] = base;
+            indices[i * 6 + 1] = base + 1;
+            indices[i * 6 + 2] = base + 2;
+            indices[i * 6 + 3] = base;
+            indices[i * 6 + 4] = base + 2;
+            indices[i * 6 + 5] = base + 3;
+        }
+        upload(vertices, indices);
     }
 
     public void draw() {
