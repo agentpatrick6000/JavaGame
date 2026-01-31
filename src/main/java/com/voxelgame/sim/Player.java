@@ -24,7 +24,7 @@ public class Player {
 
     private final Camera camera;
     private final Vector3f velocity = new Vector3f();
-    private boolean flyMode = true;   // start in fly mode
+    private boolean flyMode = false;  // start in walk mode with physics/collision
     private boolean onGround = false;
 
     /** Hotbar: block IDs for each slot. */
