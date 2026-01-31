@@ -1,5 +1,7 @@
 package com.voxelgame.platform;
 
+import com.voxelgame.input.AutomationController;
+
 import static org.lwjgl.glfw.GLFW.*;
 
 /** Keyboard and mouse input handling. */
@@ -22,6 +24,9 @@ public class Input {
     // Scroll wheel
     private static double scrollDX = 0;
     private static double scrollDY = 0;
+
+    // Automation overlay
+    private static AutomationController automationController = null;
 
     public static void init(long handle) {
         windowHandle = handle;
@@ -86,20 +91,57 @@ public class Input {
 
     public static boolean isCursorLocked() { return cursorLocked; }
 
+    // ---- Automation integration ----
+
+    /** Set the automation controller (null to disable). */
+    public static void setAutomationController(AutomationController controller) {
+        automationController = controller;
+    }
+
+    /** Get the automation controller (may be null). */
+    public static AutomationController getAutomationController() {
+        return automationController;
+    }
+
     public static boolean isKeyDown(int key) {
-        return key >= 0 && key < keys.length && keys[key];
+        boolean real = key >= 0 && key < keys.length && keys[key];
+        if (real) return true;
+        // Check automation overlay
+        return automationController != null && automationController.isKeyDown(key);
     }
 
     /** Returns true only on the frame the key was first pressed. */
     public static boolean isKeyPressed(int key) {
-        return key >= 0 && key < keys.length && keysPressed[key];
+        boolean real = key >= 0 && key < keys.length && keysPressed[key];
+        if (real) return true;
+        // Check automation overlay
+        return automationController != null && automationController.isKeyPressed(key);
     }
 
-    public static double getMouseDX() { return mouseDX; }
-    public static double getMouseDY() { return mouseDY; }
+    public static double getMouseDX() {
+        double dx = mouseDX;
+        if (automationController != null) dx += automationController.consumeMouseDX();
+        return dx;
+    }
 
-    public static boolean isLeftMouseClicked() { return leftMouseClicked; }
-    public static boolean isRightMouseClicked() { return rightMouseClicked; }
+    public static double getMouseDY() {
+        double dy = mouseDY;
+        if (automationController != null) dy += automationController.consumeMouseDY();
+        return dy;
+    }
+
+    public static boolean isLeftMouseClicked() {
+        boolean real = leftMouseClicked;
+        if (real) return true;
+        return automationController != null && automationController.consumeLeftMouseClick();
+    }
+
+    public static boolean isRightMouseClicked() {
+        boolean real = rightMouseClicked;
+        if (real) return true;
+        return automationController != null && automationController.consumeRightMouseClick();
+    }
+
     public static boolean isLeftMouseDown() { return leftMouseDown; }
     public static boolean isRightMouseDown() { return rightMouseDown; }
 
@@ -114,5 +156,9 @@ public class Input {
         leftMouseClicked = false;
         rightMouseClicked = false;
         java.util.Arrays.fill(keysPressed, false);
+        // Clear automation single-frame states
+        if (automationController != null) {
+            automationController.endFrame();
+        }
     }
 }

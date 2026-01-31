@@ -19,6 +19,11 @@ import static org.lwjgl.glfw.GLFW.*;
  * - Smooth acceleration/deceleration via friction
  * - Reduced air control when airborne
  * - Auto step-up for ≤0.5 block ledges
+ *
+ * Automation: When AutomationController is active, Input.isKeyDown()
+ * transparently returns true for automation-injected keys. No changes
+ * needed in this class — automation hooks into Input.java directly.
+ * @see com.voxelgame.input.AutomationController
  */
 public class Controller {
 

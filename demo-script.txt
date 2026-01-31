@@ -1,0 +1,114 @@
+# VoxelGame Automation Demo Script
+# This script demonstrates player movement and fly mode.
+# Run with: ./gradlew run --args="--automation --script demo-script.txt"
+
+# Wait for world to fully load
+sleep:3000
+
+# === Walk forward briefly ===
+key:W:down
+sleep:2000
+key:W:up
+sleep:500
+
+# === Toggle fly mode ===
+key:F:press
+sleep:500
+
+# === Fly forward ===
+key:W:down
+sleep:3000
+key:W:up
+sleep:300
+
+# === Fly up for altitude ===
+key:SPACE:down
+sleep:2000
+key:SPACE:up
+sleep:300
+
+# === Fly forward at altitude ===
+key:W:down
+sleep:4000
+key:W:up
+sleep:300
+
+# === Look around - strafe left then right ===
+key:A:down
+sleep:1500
+key:A:up
+sleep:300
+key:D:down
+sleep:3000
+key:D:up
+sleep:300
+key:A:down
+sleep:1500
+key:A:up
+sleep:500
+
+# === Continue forward towards water ===
+key:W:down
+sleep:5000
+key:W:up
+sleep:500
+
+# === Descend to get closer to terrain ===
+key:CTRL:down
+sleep:1500
+key:CTRL:up
+sleep:300
+
+# === More forward movement ===
+key:W:down
+sleep:3000
+key:W:up
+sleep:500
+
+# === Toggle back to walk mode ===
+key:F:press
+sleep:500
+
+# === Walk forward ===
+key:W:down
+sleep:3000
+key:W:up
+sleep:1000
+
+# === Toggle fly again for aerial overview ===
+key:F:press
+sleep:300
+
+# === Fly up high ===
+key:SPACE:down
+sleep:3000
+key:SPACE:up
+sleep:300
+
+# === Pan around ===
+key:W:down
+key:A:down
+sleep:2000
+key:A:up
+sleep:1000
+key:D:down
+sleep:2000
+key:D:up
+key:W:up
+sleep:1000
+
+# === Final descent ===
+key:CTRL:down
+sleep:2000
+key:CTRL:up
+sleep:500
+
+# === Walk mode for landing ===
+key:F:press
+sleep:300
+key:W:down
+sleep:2000
+key:W:up
+
+# Done - game stays open for socket control or manual play
+sleep:2000

@@ -1,5 +1,6 @@
 package com.voxelgame.core;
 
+import com.voxelgame.input.AutomationController;
 import com.voxelgame.platform.Input;
 import com.voxelgame.platform.Window;
 import com.voxelgame.render.BlockHighlight;
@@ -54,8 +55,19 @@ public class GameLoop {
     // Current raycast hit (updated each frame)
     private Raycast.HitResult currentHit;
 
+    // Automation
+    private boolean automationMode = false;
+    private String scriptPath = null;
+    private AutomationController automationController;
+
     // Auto-save timer
     private float autoSaveTimer = 0;
+
+    /** Enable automation mode (socket server + optional script). */
+    public void setAutomationMode(boolean enabled) { this.automationMode = enabled; }
+
+    /** Set path to automation script file. */
+    public void setScriptPath(String path) { this.scriptPath = path; }
 
     public void run() {
         init();
@@ -163,11 +175,19 @@ public class GameLoop {
         // Initial chunk load
         chunkManager.update(player);
 
+        // Initialize automation if enabled
+        if (automationMode) {
+            automationController = new AutomationController();
+            automationController.start(scriptPath);
+            System.out.println("[Automation] Controller initialized");
+        }
+
         System.out.println("VoxelGame initialized successfully!");
     }
 
     private void loop() {
-        while (!window.shouldClose()) {
+        while (!window.shouldClose() && 
+               (automationController == null || !automationController.isQuitRequested())) {
             time.update();
             float dt = time.getDeltaTime();
 
@@ -295,6 +315,11 @@ public class GameLoop {
     }
 
     private void cleanup() {
+        // Stop automation
+        if (automationController != null) {
+            automationController.stop();
+        }
+
         // Save everything on exit
         System.out.println("Saving world on exit...");
         try {
