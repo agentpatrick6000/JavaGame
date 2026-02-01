@@ -241,7 +241,9 @@ public class NaiveMesher implements Mesher {
                             float aoFactor = AO_LEVELS[ao];
                             float skyLight = sampleVertexSkyLight(world, cx + x, y, cz + z,
                                                                    face, aoOffsets[v]);
-                            float lightFactor = skyLight / 15.0f;
+                            float blockLight = sampleVertexBlockLight(world, cx + x, y, cz + z,
+                                                                   face, aoOffsets[v]);
+                            float lightFactor = Math.max(skyLight, blockLight) / 15.0f;
 
                             vertLight[v] = dirLight * aoFactor * lightFactor;
                         }
@@ -348,6 +350,40 @@ public class NaiveMesher implements Mesher {
         }
 
         return totalLight / count;
+    }
+
+    /**
+     * Sample block light for a vertex, similar to sky light sampling.
+     */
+    private float sampleVertexBlockLight(WorldAccess world, int bx, int by, int bz,
+                                          int face, int[][] aoNeighbors) {
+        int[] normal = FACE_NORMALS[face];
+        int fnx = bx + normal[0];
+        int fny = by + normal[1];
+        int fnz = bz + normal[2];
+
+        float totalLight = getBlockLightSafe(world, fnx, fny, fnz);
+        int count = 1;
+
+        for (int[] ao : aoNeighbors) {
+            int sx = bx + ao[0];
+            int sy = by + ao[1];
+            int sz = bz + ao[2];
+            int blockId = world.getBlock(sx, sy, sz);
+            Block block = Blocks.get(blockId);
+            if (!block.solid() || block.transparent()) {
+                totalLight += getBlockLightSafe(world, sx, sy, sz);
+                count++;
+            }
+        }
+
+        return totalLight / count;
+    }
+
+    private float getBlockLightSafe(WorldAccess world, int x, int y, int z) {
+        if (y >= WorldConstants.WORLD_HEIGHT) return 0.0f;
+        if (y < 0) return 0.0f;
+        return world.getBlockLight(x, y, z);
     }
 
     private float getSkyLightSafe(WorldAccess world, int x, int y, int z) {

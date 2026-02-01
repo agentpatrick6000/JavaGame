@@ -21,6 +21,8 @@ public class RNG {
 
     public float nextFloat() { return random.nextFloat(); }
 
+    public boolean nextBoolean() { return random.nextBoolean(); }
+
     public double nextDouble() { return random.nextDouble(); }
 
     public long getSeed() { return seed; }

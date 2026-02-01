@@ -58,6 +58,7 @@ public class GenPipeline {
         pipeline.addPass(new FillFluidsPass());
         pipeline.addPass(new OreVeinsPass());
         pipeline.addPass(new TreesPass());
+        pipeline.addPass(new FlowersPass());
 
         return pipeline;
     }

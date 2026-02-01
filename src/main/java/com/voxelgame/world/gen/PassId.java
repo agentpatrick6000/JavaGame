@@ -11,5 +11,6 @@ public enum PassId {
     SURFACE_PAINT,
     ORE_VEINS,
     TREES,
+    FLOWERS,
     DECORATIONS
 }

@@ -14,9 +14,9 @@ public class TextureAtlas {
 
     private static final int TILE_SIZE = 16;
     private static final int TILES_PER_ROW = 8;
-    private static final int TILE_COUNT = 22; // 0-21 (includes crafted blocks)
+    private static final int TILE_COUNT = 39; // 0-38 (includes InfDev 611 blocks + charcoal)
     private static final int ATLAS_WIDTH = TILES_PER_ROW * TILE_SIZE;  // 128
-    private static final int ATLAS_HEIGHT = ((TILE_COUNT + TILES_PER_ROW - 1) / TILES_PER_ROW) * TILE_SIZE; // 48
+    private static final int ATLAS_HEIGHT = ((TILE_COUNT + TILES_PER_ROW - 1) / TILES_PER_ROW) * TILE_SIZE;
 
     private int textureId;
 
@@ -81,6 +81,25 @@ public class TextureAtlas {
             case 19 -> generatePlanks(pixels, baseX, baseY);
             case 20 -> generateCraftingTableTop(pixels, baseX, baseY);
             case 21 -> generateCraftingTableSide(pixels, baseX, baseY);
+            // Chest textures (22-23) already handled by existing code layout
+            case 22 -> generateChestTop(pixels, baseX, baseY);
+            case 23 -> generateChestSide(pixels, baseX, baseY);
+            case 24 -> generateRail(pixels, baseX, baseY);
+            case 25 -> generateTNTTop(pixels, baseX, baseY);
+            case 26 -> generateTNTSide(pixels, baseX, baseY);
+            // InfDev 611 textures
+            case 27 -> generateFurnaceTop(pixels, baseX, baseY);
+            case 28 -> generateFurnaceSide(pixels, baseX, baseY);
+            case 29 -> generateFurnaceFront(pixels, baseX, baseY);
+            case 30 -> generateTorch(pixels, baseX, baseY);
+            case 31 -> generateCoalItem(pixels, baseX, baseY);
+            case 32 -> generateIronIngot(pixels, baseX, baseY);
+            case 33 -> generateGlass(pixels, baseX, baseY);
+            case 34 -> generateSolidColor(pixels, baseX, baseY, 200, 130, 80);  // cooked porkchop
+            case 35 -> generateRedFlower(pixels, baseX, baseY);
+            case 36 -> generateYellowFlower(pixels, baseX, baseY);
+            case 37 -> generateDiamond(pixels, baseX, baseY);
+            case 38 -> generateCharcoal(pixels, baseX, baseY);
         }
     }
 
@@ -268,6 +287,261 @@ public class TextureAtlas {
                     setPixel(buf, bx + x, by + y, 80 + noise, 60 + noise, 35 + noise, 255);
                 } else {
                     setPixel(buf, bx + x, by + y, 170 + noise, 130 + noise, 70 + noise, 255);
+                }
+            }
+    }
+
+    // ---- Chest textures ----
+    private void generateChestTop(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 7) - 4;
+                boolean border = x == 0 || x == 15 || y == 0 || y == 15;
+                boolean latch = (x >= 6 && x <= 9 && y >= 0 && y <= 2);
+                if (latch) {
+                    setPixel(buf, bx + x, by + y, 80 + noise, 70 + noise, 50 + noise, 255);
+                } else if (border) {
+                    setPixel(buf, bx + x, by + y, 100 + noise, 75 + noise, 40 + noise, 255);
+                } else {
+                    setPixel(buf, bx + x, by + y, 160 + noise, 120 + noise, 60 + noise, 255);
+                }
+            }
+    }
+
+    private void generateChestSide(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 7) - 4;
+                boolean border = x == 0 || x == 15 || y == 0 || y == 15;
+                boolean latch = (x >= 6 && x <= 9 && y >= 5 && y <= 9);
+                if (latch) {
+                    setPixel(buf, bx + x, by + y, 80 + noise, 70 + noise, 50 + noise, 255);
+                } else if (border) {
+                    setPixel(buf, bx + x, by + y, 100 + noise, 75 + noise, 40 + noise, 255);
+                } else {
+                    setPixel(buf, bx + x, by + y, 160 + noise, 120 + noise, 60 + noise, 255);
+                }
+            }
+    }
+
+    // ---- Rail texture ----
+    private void generateRail(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 7) - 4;
+                boolean rail = (x == 3 || x == 12);
+                boolean tie = (y % 4 < 2) && (x >= 2 && x <= 13);
+                if (rail) {
+                    setPixel(buf, bx + x, by + y, 140 + noise, 130 + noise, 120 + noise, 255);
+                } else if (tie) {
+                    setPixel(buf, bx + x, by + y, 120 + noise, 85 + noise, 50 + noise, 255);
+                } else {
+                    setPixel(buf, bx + x, by + y, 0, 0, 0, 0); // transparent
+                }
+            }
+    }
+
+    // ---- TNT textures ----
+    private void generateTNTTop(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 7) - 4;
+                boolean fuse = (x >= 6 && x <= 9 && y >= 6 && y <= 9);
+                if (fuse) {
+                    setPixel(buf, bx + x, by + y, 60 + noise, 60 + noise, 60 + noise, 255);
+                } else {
+                    setPixel(buf, bx + x, by + y, 200 + noise, 50 + noise, 30 + noise, 255);
+                }
+            }
+    }
+
+    private void generateTNTSide(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 7) - 4;
+                boolean stripe = (y >= 4 && y <= 11);
+                if (stripe) {
+                    setPixel(buf, bx + x, by + y, 200 + noise, 50 + noise, 30 + noise, 255);
+                } else {
+                    setPixel(buf, bx + x, by + y, 160 + noise, 140 + noise, 120 + noise, 255);
+                }
+            }
+    }
+
+    // ---- InfDev 611 textures ----
+
+    private void generateFurnaceTop(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 15) - 8;
+                int v = 115 + noise;
+                setPixel(buf, bx + x, by + y, v, v, v, 255);
+            }
+    }
+
+    private void generateFurnaceSide(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 7) - 4;
+                boolean border = x == 0 || x == 15 || y == 0 || y == 15;
+                if (border) {
+                    int v = 90 + noise;
+                    setPixel(buf, bx + x, by + y, v, v, v, 255);
+                } else {
+                    int v = 115 + noise;
+                    setPixel(buf, bx + x, by + y, v, v, v, 255);
+                }
+            }
+    }
+
+    private void generateFurnaceFront(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 7) - 4;
+                boolean mouth = (x >= 4 && x <= 11 && y >= 6 && y <= 13);
+                boolean border = x == 0 || x == 15 || y == 0 || y == 15;
+                if (mouth) {
+                    setPixel(buf, bx + x, by + y, 40 + noise, 35 + noise, 30 + noise, 255);
+                } else if (border) {
+                    int v = 90 + noise;
+                    setPixel(buf, bx + x, by + y, v, v, v, 255);
+                } else {
+                    int v = 115 + noise;
+                    setPixel(buf, bx + x, by + y, v, v, v, 255);
+                }
+            }
+    }
+
+    private void generateTorch(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 3) - 2;
+                boolean stick = (x >= 6 && x <= 9 && y >= 4 && y <= 15);
+                boolean flame = (x >= 5 && x <= 10 && y >= 0 && y <= 4);
+                boolean flameCenter = (x >= 7 && x <= 8 && y >= 1 && y <= 3);
+                if (flameCenter) {
+                    setPixel(buf, bx + x, by + y, 255, 255, 180, 240);
+                } else if (flame && ((x + y) % 2 == 0)) {
+                    setPixel(buf, bx + x, by + y, 255, 180 + noise * 10, 50, 200);
+                } else if (stick) {
+                    setPixel(buf, bx + x, by + y, 120 + noise, 85 + noise, 50 + noise, 255);
+                } else {
+                    setPixel(buf, bx + x, by + y, 0, 0, 0, 0); // transparent
+                }
+            }
+    }
+
+    private void generateCoalItem(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 15) - 8;
+                boolean shape = (x >= 3 && x <= 12 && y >= 3 && y <= 12) &&
+                                !((x == 3 || x == 12) && (y == 3 || y == 12));
+                if (shape) {
+                    int v = 35 + noise;
+                    setPixel(buf, bx + x, by + y, v, v, v, 255);
+                } else {
+                    setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
+                }
+            }
+    }
+
+    private void generateIronIngot(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 7) - 4;
+                boolean shape = (x >= 2 && x <= 13 && y >= 5 && y <= 12);
+                boolean top = (x >= 4 && x <= 11 && y >= 3 && y <= 5);
+                if (shape || top) {
+                    setPixel(buf, bx + x, by + y, 200 + noise, 195 + noise, 190 + noise, 255);
+                } else {
+                    setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
+                }
+            }
+    }
+
+    private void generateGlass(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                boolean border = x == 0 || x == 15 || y == 0 || y == 15;
+                boolean frame = (x == 1 || x == 14 || y == 1 || y == 14);
+                int noise = (hash(x, y) & 7) - 4;
+                if (border) {
+                    setPixel(buf, bx + x, by + y, 180 + noise, 200 + noise, 210 + noise, 255);
+                } else if (frame) {
+                    setPixel(buf, bx + x, by + y, 200 + noise, 220 + noise, 230 + noise, 200);
+                } else {
+                    setPixel(buf, bx + x, by + y, 210 + noise, 230 + noise, 240 + noise, 80);
+                }
+            }
+    }
+
+    private void generateRedFlower(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 3) - 2;
+                boolean stem = (x >= 7 && x <= 8 && y >= 10 && y <= 15);
+                boolean petal = Math.sqrt((x - 7.5) * (x - 7.5) + (y - 6) * (y - 6)) < 4.5;
+                boolean center = Math.sqrt((x - 7.5) * (x - 7.5) + (y - 6) * (y - 6)) < 1.5;
+                if (center) {
+                    setPixel(buf, bx + x, by + y, 255, 200 + noise * 10, 50, 255);
+                } else if (petal) {
+                    setPixel(buf, bx + x, by + y, 220 + noise * 5, 30 + noise * 5, 30, 255);
+                } else if (stem) {
+                    setPixel(buf, bx + x, by + y, 40 + noise, 120 + noise, 20 + noise, 255);
+                } else {
+                    setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
+                }
+            }
+    }
+
+    private void generateYellowFlower(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 3) - 2;
+                boolean stem = (x >= 7 && x <= 8 && y >= 10 && y <= 15);
+                boolean petal = Math.sqrt((x - 7.5) * (x - 7.5) + (y - 6) * (y - 6)) < 4;
+                boolean center = Math.sqrt((x - 7.5) * (x - 7.5) + (y - 6) * (y - 6)) < 1.5;
+                if (center) {
+                    setPixel(buf, bx + x, by + y, 180 + noise * 5, 120 + noise * 5, 30, 255);
+                } else if (petal) {
+                    setPixel(buf, bx + x, by + y, 255, 230 + noise * 5, 50 + noise * 5, 255);
+                } else if (stem) {
+                    setPixel(buf, bx + x, by + y, 40 + noise, 120 + noise, 20 + noise, 255);
+                } else {
+                    setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
+                }
+            }
+    }
+
+    private void generateDiamond(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 7) - 4;
+                // Diamond shape
+                int cx = Math.abs(x - 7);
+                int cy = Math.abs(y - 7);
+                boolean shape = (cx + cy) <= 6 && cy <= 5;
+                if (shape) {
+                    int bright = (cx + cy < 4) ? 20 : 0;
+                    setPixel(buf, bx + x, by + y, 130 + noise + bright, 230 + noise + bright,
+                             255, 255);
+                } else {
+                    setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
+                }
+            }
+    }
+
+    private void generateCharcoal(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 15) - 8;
+                boolean shape = (x >= 3 && x <= 12 && y >= 3 && y <= 12) &&
+                                !((x == 3 || x == 12) && (y == 3 || y == 12));
+                if (shape) {
+                    setPixel(buf, bx + x, by + y, 55 + noise, 40 + noise, 25 + noise, 255);
+                } else {
+                    setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
                 }
             }
     }

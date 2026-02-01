@@ -338,6 +338,182 @@ public class Lighting {
         }
     }
 
+    // ======== BLOCK LIGHT SYSTEM ========
+
+    /**
+     * Compute initial block light for a newly generated chunk.
+     * Scans for light-emitting blocks and propagates from them.
+     */
+    public static void computeInitialBlockLight(Chunk chunk, World world) {
+        ChunkPos cPos = chunk.getPos();
+        int cx = cPos.x() * WorldConstants.CHUNK_SIZE;
+        int cz = cPos.z() * WorldConstants.CHUNK_SIZE;
+
+        Queue<long[]> bfsQueue = new ArrayDeque<>();
+
+        for (int x = 0; x < WorldConstants.CHUNK_SIZE; x++) {
+            for (int z = 0; z < WorldConstants.CHUNK_SIZE; z++) {
+                for (int y = 0; y < WorldConstants.WORLD_HEIGHT; y++) {
+                    int blockId = chunk.getBlock(x, y, z);
+                    int emission = Blocks.getLightEmission(blockId);
+                    if (emission > 0) {
+                        chunk.setBlockLight(x, y, z, emission);
+                        bfsQueue.add(new long[]{cx + x, y, cz + z, emission});
+                    }
+                }
+            }
+        }
+
+        propagateBlockLightBFS(bfsQueue, world);
+    }
+
+    /**
+     * BFS flood-fill block light propagation.
+     */
+    private static void propagateBlockLightBFS(Queue<long[]> queue, World world) {
+        while (!queue.isEmpty()) {
+            long[] entry = queue.poll();
+            int wx = (int) entry[0];
+            int wy = (int) entry[1];
+            int wz = (int) entry[2];
+            int lightLevel = (int) entry[3];
+
+            for (int[] dir : DIRS) {
+                int nx = wx + dir[0];
+                int ny = wy + dir[1];
+                int nz = wz + dir[2];
+
+                if (ny < 0 || ny >= WorldConstants.WORLD_HEIGHT) continue;
+
+                int neighborBlock = world.getBlock(nx, ny, nz);
+                Block nBlock = Blocks.get(neighborBlock);
+
+                if (isOpaque(nBlock)) continue;
+
+                int reduction = getLightReduction(nBlock);
+                int newLight = lightLevel - 1 - reduction;
+
+                if (newLight <= 0) continue;
+
+                int currentLight = world.getBlockLight(nx, ny, nz);
+                if (newLight > currentLight) {
+                    world.setBlockLight(nx, ny, nz, newLight);
+                    queue.add(new long[]{nx, ny, nz, newLight});
+                }
+            }
+        }
+    }
+
+    /**
+     * Add block light when a light-emitting block is placed (e.g., torch).
+     */
+    public static Set<ChunkPos> onLightSourcePlaced(World world, int wx, int wy, int wz) {
+        Set<ChunkPos> affectedChunks = new HashSet<>();
+        int blockId = world.getBlock(wx, wy, wz);
+        int emission = Blocks.getLightEmission(blockId);
+        if (emission <= 0) return affectedChunks;
+
+        world.setBlockLight(wx, wy, wz, emission);
+        addAffectedChunk(affectedChunks, wx, wy, wz);
+
+        Queue<long[]> bfsQueue = new ArrayDeque<>();
+        bfsQueue.add(new long[]{wx, wy, wz, emission});
+        propagateBlockLightBFSTracked(bfsQueue, world, affectedChunks);
+
+        return affectedChunks;
+    }
+
+    /**
+     * Remove block light when a light source is removed (e.g., torch broken).
+     */
+    public static Set<ChunkPos> onLightSourceRemoved(World world, int wx, int wy, int wz, int oldEmission) {
+        Set<ChunkPos> affectedChunks = new HashSet<>();
+        if (oldEmission <= 0) return affectedChunks;
+
+        // BFS removal: clear all light that originated from this source
+        Queue<long[]> removeQueue = new ArrayDeque<>();
+        Queue<long[]> reproQueue = new ArrayDeque<>();
+        Set<Long> visited = new HashSet<>();
+
+        world.setBlockLight(wx, wy, wz, 0);
+        addAffectedChunk(affectedChunks, wx, wy, wz);
+        removeQueue.add(new long[]{wx, wy, wz, oldEmission});
+
+        while (!removeQueue.isEmpty()) {
+            long[] entry = removeQueue.poll();
+            int ex = (int) entry[0];
+            int ey = (int) entry[1];
+            int ez = (int) entry[2];
+            int oldLight = (int) entry[3];
+
+            for (int[] dir : DIRS) {
+                int nx = ex + dir[0];
+                int ny = ey + dir[1];
+                int nz = ez + dir[2];
+                if (ny < 0 || ny >= WorldConstants.WORLD_HEIGHT) continue;
+
+                long key = packPos(nx, ny, nz);
+                if (visited.contains(key)) continue;
+
+                int nBlockId = world.getBlock(nx, ny, nz);
+                if (isOpaque(Blocks.get(nBlockId))) continue;
+
+                int nLight = world.getBlockLight(nx, ny, nz);
+                if (nLight > 0 && nLight < oldLight) {
+                    world.setBlockLight(nx, ny, nz, 0);
+                    addAffectedChunk(affectedChunks, nx, ny, nz);
+                    visited.add(key);
+                    removeQueue.add(new long[]{nx, ny, nz, nLight});
+                } else if (nLight >= oldLight && nLight > 0) {
+                    reproQueue.add(new long[]{nx, ny, nz, nLight});
+                }
+            }
+        }
+
+        // Re-propagate from other light sources
+        propagateBlockLightBFSTracked(reproQueue, world, affectedChunks);
+
+        return affectedChunks;
+    }
+
+    /**
+     * BFS block light propagation that tracks affected chunks.
+     */
+    private static void propagateBlockLightBFSTracked(Queue<long[]> queue, World world, Set<ChunkPos> affected) {
+        while (!queue.isEmpty()) {
+            long[] entry = queue.poll();
+            int wx = (int) entry[0];
+            int wy = (int) entry[1];
+            int wz = (int) entry[2];
+            int lightLevel = (int) entry[3];
+
+            for (int[] dir : DIRS) {
+                int nx = wx + dir[0];
+                int ny = wy + dir[1];
+                int nz = wz + dir[2];
+
+                if (ny < 0 || ny >= WorldConstants.WORLD_HEIGHT) continue;
+
+                int neighborBlock = world.getBlock(nx, ny, nz);
+                Block nBlock = Blocks.get(neighborBlock);
+
+                if (isOpaque(nBlock)) continue;
+
+                int reduction = getLightReduction(nBlock);
+                int newLight = lightLevel - 1 - reduction;
+
+                if (newLight <= 0) continue;
+
+                int currentLight = world.getBlockLight(nx, ny, nz);
+                if (newLight > currentLight) {
+                    world.setBlockLight(nx, ny, nz, newLight);
+                    addAffectedChunk(affected, nx, ny, nz);
+                    queue.add(new long[]{nx, ny, nz, newLight});
+                }
+            }
+        }
+    }
+
     /** Check if a block is opaque (blocks light completely). */
     private static boolean isOpaque(Block block) {
         return block.solid() && !block.transparent();
