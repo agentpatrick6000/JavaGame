@@ -19,4 +19,9 @@ public class GreedyMesher implements Mesher {
     public MeshResult meshAll(Chunk chunk, WorldAccess world) {
         return fallback.meshAll(chunk, world);
     }
+
+    @Override
+    public RawMeshResult meshAllRaw(Chunk chunk, WorldAccess world) {
+        return fallback.meshAllRaw(chunk, world);
+    }
 }

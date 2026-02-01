@@ -6,6 +6,7 @@ import com.voxelgame.sim.Player;
 import com.voxelgame.world.*;
 import com.voxelgame.world.gen.GenPipeline;
 import com.voxelgame.world.mesh.MeshResult;
+import com.voxelgame.world.mesh.RawMeshResult;
 import com.voxelgame.world.mesh.Mesher;
 import com.voxelgame.world.mesh.NaiveMesher;
 
@@ -215,6 +216,7 @@ public class ChunkManager {
 
     /**
      * Submit a mesh building job to the background mesh pool.
+     * Uses meshAllRaw (CPU-only, no GL calls) on background threads.
      */
     private void submitMeshJob(Chunk chunk, ChunkPos pos) {
         if (meshingInProgress.contains(pos)) return;
@@ -222,10 +224,10 @@ public class ChunkManager {
 
         meshPool.submit(() -> {
             try {
-                // Build mesh on background thread (CPU work only)
-                MeshResult result = mesher.meshAll(chunk, world);
-                // Queue the result for GPU upload on main thread
-                uploadQueue.add(new MeshUpload(chunk, pos, result, false));
+                // Build mesh data on background thread (CPU work only — no GL calls)
+                RawMeshResult raw = mesher.meshAllRaw(chunk, world);
+                // Queue the raw data for GPU upload on main thread
+                uploadQueue.add(new MeshUpload(chunk, pos, raw));
             } catch (Exception e) {
                 System.err.println("Mesh building failed for " + pos + ": " + e.getMessage());
             } finally {
@@ -242,8 +244,8 @@ public class ChunkManager {
                 meshingInProgress.add(nPos);
                 meshPool.submit(() -> {
                     try {
-                        MeshResult result = mesher.meshAll(neighbor, world);
-                        uploadQueue.add(new MeshUpload(neighbor, nPos, result, false));
+                        RawMeshResult raw = mesher.meshAllRaw(neighbor, world);
+                        uploadQueue.add(new MeshUpload(neighbor, nPos, raw));
                     } catch (Exception e) {
                         // Neighbor mesh rebuild failure is non-critical
                     } finally {
@@ -263,9 +265,10 @@ public class ChunkManager {
         MeshUpload upload;
         while ((upload = uploadQueue.poll()) != null && uploaded < MAX_MESH_UPLOADS_PER_FRAME) {
             Chunk chunk = upload.chunk;
-            MeshResult result = upload.result;
+            RawMeshResult raw = upload.rawResult;
 
-            // Upload to GPU (must be on main/GL thread)
+            // Upload to GPU on the GL thread
+            MeshResult result = raw.upload();
             chunk.setMesh(result.opaqueMesh());
             chunk.setTransparentMesh(result.transparentMesh());
             chunk.setDirty(false);
@@ -392,13 +395,11 @@ public class ChunkManager {
     private static class MeshUpload {
         final Chunk chunk;
         final ChunkPos pos;
-        final MeshResult result;
-        final boolean isNeighborRebuild;
-        MeshUpload(Chunk chunk, ChunkPos pos, MeshResult result, boolean isNeighborRebuild) {
+        final RawMeshResult rawResult;
+        MeshUpload(Chunk chunk, ChunkPos pos, RawMeshResult rawResult) {
             this.chunk = chunk;
             this.pos = pos;
-            this.result = result;
-            this.isNeighborRebuild = isNeighborRebuild;
+            this.rawResult = rawResult;
         }
     }
 }

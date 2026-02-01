@@ -164,7 +164,7 @@ public class NaiveMesher implements Mesher {
     }
 
     @Override
-    public MeshResult meshAll(Chunk chunk, WorldAccess world) {
+    public RawMeshResult meshAllRaw(Chunk chunk, WorldAccess world) {
         // Separate lists for opaque and transparent geometry
         List<Float> opaqueVerts = new ArrayList<>();
         List<Integer> opaqueIndices = new ArrayList<>();
@@ -302,12 +302,19 @@ public class NaiveMesher implements Mesher {
             }
         }
 
-        ChunkMesh opaqueMesh = buildChunkMesh(opaqueVerts, opaqueIndices);
-        ChunkMesh transparentMesh = buildChunkMesh(transVerts, transIndices);
-        return new MeshResult(opaqueMesh, transparentMesh);
+        MeshData opaqueData = buildMeshData(opaqueVerts, opaqueIndices);
+        MeshData transparentData = buildMeshData(transVerts, transIndices);
+        return new RawMeshResult(opaqueData, transparentData);
     }
 
-    private ChunkMesh buildChunkMesh(List<Float> verts, List<Integer> indices) {
+    @Override
+    public MeshResult meshAll(Chunk chunk, WorldAccess world) {
+        // meshAll delegates to raw + upload (for main-thread callers)
+        RawMeshResult raw = meshAllRaw(chunk, world);
+        return raw.upload();
+    }
+
+    private MeshData buildMeshData(List<Float> verts, List<Integer> indices) {
         float[] vertArray = new float[verts.size()];
         for (int i = 0; i < verts.size(); i++) {
             vertArray[i] = verts.get(i);
@@ -316,9 +323,7 @@ public class NaiveMesher implements Mesher {
         for (int i = 0; i < indices.size(); i++) {
             idxArray[i] = indices.get(i);
         }
-        ChunkMesh mesh = new ChunkMesh();
-        mesh.upload(vertArray, idxArray);
-        return mesh;
+        return new MeshData(vertArray, idxArray);
     }
 
     /**
