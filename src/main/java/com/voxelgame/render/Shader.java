@@ -1,6 +1,7 @@
 package com.voxelgame.render;
 
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 import org.lwjgl.system.MemoryStack;
 
 import java.io.BufferedReader;
@@ -96,6 +97,14 @@ public class Shader {
 
     public void setFloat(String name, float value) {
         glUniform1f(getUniformLocation(name), value);
+    }
+
+    public void setVec3(String name, float x, float y, float z) {
+        glUniform3f(getUniformLocation(name), x, y, z);
+    }
+
+    public void setVec3(String name, Vector3f v) {
+        glUniform3f(getUniformLocation(name), v.x, v.y, v.z);
     }
 
     public void setVec4(String name, float x, float y, float z, float w) {

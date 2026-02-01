@@ -6,15 +6,24 @@ layout(location = 3) in float aBlockLight;
 
 uniform mat4 uProjection;
 uniform mat4 uView;
+uniform vec3 uCameraPos;
 
 out vec2 vTexCoord;
 out float vSkyLight;
 out float vBlockLight;
+out float vFogFactor;
+
+// Fog parameters
+const float FOG_START = 80.0;
+const float FOG_END = 128.0;
 
 void main() {
     gl_Position = uProjection * uView * vec4(aPos, 1.0);
     vTexCoord = aTexCoord;
-    // Pass both light channels through — interpolation gives smooth vertex lighting
     vSkyLight = aSkyLight;
     vBlockLight = aBlockLight;
+
+    // Distance-based fog (linear)
+    float dist = length(aPos - uCameraPos);
+    vFogFactor = clamp((dist - FOG_START) / (FOG_END - FOG_START), 0.0, 1.0);
 }

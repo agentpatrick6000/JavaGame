@@ -2,10 +2,12 @@
 in vec2 vTexCoord;
 in float vSkyLight;
 in float vBlockLight;
+in float vFogFactor;
 
 uniform sampler2D uAtlas;
 uniform float uAlpha;         // 1.0 for opaque pass, <1.0 for transparent pass
 uniform float uSunBrightness; // 0.0 = midnight, 1.0 = noon
+uniform vec3 uFogColor;       // sky/fog color (matches clear color)
 
 out vec4 fragColor;
 
@@ -28,5 +30,10 @@ void main() {
         tintedLight = mix(tintedLight, tintedLight * vec3(0.7, 0.75, 1.0), nightFactor * 0.4);
     }
 
-    fragColor = vec4(texColor.rgb * tintedLight, texColor.a * uAlpha);
+    vec3 litColor = texColor.rgb * tintedLight;
+
+    // Apply distance fog (blends to sky color, hides chunk pop-in)
+    vec3 finalColor = mix(litColor, uFogColor, vFogFactor);
+
+    fragColor = vec4(finalColor, texColor.a * uAlpha);
 }

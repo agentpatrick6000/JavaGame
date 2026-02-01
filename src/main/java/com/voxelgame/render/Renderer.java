@@ -5,6 +5,7 @@ import com.voxelgame.world.ChunkPos;
 import com.voxelgame.world.World;
 import com.voxelgame.world.WorldTime;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 import static org.lwjgl.opengl.GL33.*;
 
@@ -28,6 +29,9 @@ public class Renderer {
     /** Current sun brightness for time-of-day lighting. Updated each frame. */
     private float sunBrightness = 1.0f;
 
+    /** Current fog/sky color. Updated each frame from WorldTime. */
+    private float[] fogColor = {0.53f, 0.68f, 0.90f};
+
     public Renderer(World world) {
         this.world = world;
     }
@@ -39,10 +43,11 @@ public class Renderer {
         frustum = new Frustum();
     }
 
-    /** Update sun brightness from world time. Call once per frame. */
+    /** Update sun brightness and fog color from world time. Call once per frame. */
     public void updateLighting(WorldTime worldTime) {
         if (worldTime != null) {
             this.sunBrightness = worldTime.getSunBrightness();
+            this.fogColor = worldTime.getSkyColor();
         }
     }
 
@@ -60,6 +65,8 @@ public class Renderer {
         blockShader.setMat4("uView", view);
         blockShader.setInt("uAtlas", 0);
         blockShader.setFloat("uSunBrightness", sunBrightness);
+        blockShader.setVec3("uCameraPos", camera.getPosition());
+        blockShader.setVec3("uFogColor", fogColor[0], fogColor[1], fogColor[2]);
 
         atlas.bind(0);
 
