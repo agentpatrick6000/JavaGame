@@ -938,6 +938,16 @@ public class GameLoop {
     private void renderGameWorld(int w, int h, float dt) {
         if (!gameInitialized) return;
 
+        // Update sky color based on time of day
+        if (worldTime != null) {
+            float[] skyColor = worldTime.getSkyColor();
+            glClearColor(skyColor[0], skyColor[1], skyColor[2], 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            // Update renderer's sun brightness for shader
+            renderer.updateLighting(worldTime);
+        }
+
         // 3D rendering
         glEnable(GL_DEPTH_TEST);
         glDepthMask(true);

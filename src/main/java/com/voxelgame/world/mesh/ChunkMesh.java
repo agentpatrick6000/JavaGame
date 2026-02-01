@@ -21,7 +21,7 @@ public class ChunkMesh {
 
     /**
      * Upload mesh data to GPU with explicit index array.
-     * Vertex format: [x, y, z, u, v, light] per vertex.
+     * Vertex format: [x, y, z, u, v, skyLight, blockLight] per vertex.
      */
     public void upload(float[] vertices, int[] indices) {
         if (indices.length == 0) {
@@ -52,7 +52,7 @@ public class ChunkMesh {
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, idxBuf, GL_DYNAMIC_DRAW);
         MemoryUtil.memFree(idxBuf);
 
-        int stride = 6 * Float.BYTES; // x, y, z, u, v, light
+        int stride = 7 * Float.BYTES; // x, y, z, u, v, skyLight, blockLight
 
         // Position (location 0)
         glVertexAttribPointer(0, 3, GL_FLOAT, false, stride, 0);
@@ -62,9 +62,13 @@ public class ChunkMesh {
         glVertexAttribPointer(1, 2, GL_FLOAT, false, stride, 3L * Float.BYTES);
         glEnableVertexAttribArray(1);
 
-        // Light (location 2)
+        // SkyLight (location 2)
         glVertexAttribPointer(2, 1, GL_FLOAT, false, stride, 5L * Float.BYTES);
         glEnableVertexAttribArray(2);
+
+        // BlockLight (location 3)
+        glVertexAttribPointer(3, 1, GL_FLOAT, false, stride, 6L * Float.BYTES);
+        glEnableVertexAttribArray(3);
 
         glBindVertexArray(0);
         uploaded = true;
