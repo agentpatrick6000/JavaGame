@@ -26,6 +26,9 @@ public class GenContext {
     // Tree density noise
     private final Perlin treeDensityNoise;
 
+    // Erosion noise — creates valleys and flat areas
+    private final Perlin erosionNoise;
+
     public GenContext(long seed, GenConfig config) {
         this.seed = seed;
         this.config = config;
@@ -40,6 +43,9 @@ public class GenContext {
 
         // Tree density noise
         this.treeDensityNoise = new Perlin(seed + 4000L);
+
+        // Erosion noise (for valleys and varied terrain)
+        this.erosionNoise = new Perlin(seed + 5000L);
     }
 
     public long getSeed() { return seed; }
@@ -50,6 +56,7 @@ public class GenContext {
     public Perlin getCaveNoise1() { return caveNoise1; }
     public Perlin getCaveNoise2() { return caveNoise2; }
     public Perlin getTreeDensityNoise() { return treeDensityNoise; }
+    public Perlin getErosionNoise() { return erosionNoise; }
 
     /**
      * Create an RNG seeded for a specific chunk position.

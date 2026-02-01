@@ -35,6 +35,9 @@ public final class RecipeRegistry {
         int CRAFT_TABLE = Blocks.CRAFTING_TABLE.id();
         int SAND = Blocks.SAND.id();
         int IRON = Blocks.IRON_ORE.id();
+        int COAL = Blocks.COAL.id();
+        int CHARCOAL = Blocks.CHARCOAL.id();
+        int IRON_INGOT = Blocks.IRON_INGOT.id();
 
         recipes.add(Recipe.shapeless(new int[]{ LOG }, PLANKS, 4));
         recipes.add(new Recipe(1, 2, new int[]{ PLANKS, PLANKS }, STICK, 4));
@@ -56,14 +59,33 @@ public final class RecipeRegistry {
         // Boat: planks in bottom row + stick
         recipes.add(new Recipe(2, 2, new int[]{ PLANKS, 0, PLANKS, PLANKS }, Blocks.BOAT_ITEM.id(), 1));
 
-        // Minecart: iron ore (since no iron ingots yet)
-        recipes.add(new Recipe(2, 2, new int[]{ IRON, 0, IRON, IRON }, Blocks.MINECART_ITEM.id(), 1));
+        // Minecart: iron ingots (now available via smelting)
+        recipes.add(new Recipe(2, 2, new int[]{ IRON_INGOT, 0, IRON_INGOT, IRON_INGOT }, Blocks.MINECART_ITEM.id(), 1));
 
-        // Rail: iron + stick
-        recipes.add(new Recipe(2, 2, new int[]{ IRON, 0, STICK, 0 }, Blocks.RAIL.id(), 16));
+        // Rail: iron ingot + stick
+        recipes.add(new Recipe(2, 2, new int[]{ IRON_INGOT, 0, STICK, 0 }, Blocks.RAIL.id(), 16));
 
         // TNT: sand + gravel (simplified recipe since no gunpowder)
         recipes.add(new Recipe(2, 2, new int[]{ SAND, SAND, SAND, SAND }, Blocks.TNT.id(), 1));
+
+        // ---- InfDev 611 recipes ----
+
+        // Furnace: 4 cobblestone in 2x2
+        recipes.add(new Recipe(2, 2, new int[]{ COBBLE, COBBLE, COBBLE, COBBLE }, Blocks.FURNACE.id(), 1));
+
+        // Torch: coal/charcoal + stick → 4 torches
+        recipes.add(new Recipe(1, 2, new int[]{ COAL, STICK }, Blocks.TORCH.id(), 4));
+        recipes.add(new Recipe(1, 2, new int[]{ CHARCOAL, STICK }, Blocks.TORCH.id(), 4));
+
+        // Iron tools (require iron ingots)
+        recipes.add(new Recipe(2, 2, new int[]{ IRON_INGOT, IRON_INGOT, STICK, 0 }, Blocks.IRON_PICKAXE.id(), 1));
+        recipes.add(new Recipe(2, 2, new int[]{ IRON_INGOT, IRON_INGOT, IRON_INGOT, STICK }, Blocks.IRON_AXE.id(), 1));
+        recipes.add(new Recipe(1, 2, new int[]{ IRON_INGOT, STICK }, Blocks.IRON_SHOVEL.id(), 1));
+
+        // Swords
+        recipes.add(new Recipe(1, 2, new int[]{ PLANKS, STICK }, Blocks.WOODEN_SWORD.id(), 1));
+        recipes.add(new Recipe(1, 2, new int[]{ COBBLE, STICK }, Blocks.STONE_SWORD.id(), 1));
+        recipes.add(new Recipe(1, 2, new int[]{ IRON_INGOT, STICK }, Blocks.IRON_SWORD.id(), 1));
 
         System.out.println("[RecipeRegistry] Registered " + recipes.size() + " recipes");
     }

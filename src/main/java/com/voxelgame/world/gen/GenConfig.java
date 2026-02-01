@@ -8,22 +8,22 @@ public class GenConfig {
 
     // --- Terrain ---
     public int baseHeight = 64;         // sea level / base height
-    public int heightVariation = 30;    // ±blocks from base height
-    public double continentalFreq = 0.002;  // large-scale terrain shape
-    public double detailFreq = 0.01;        // small-scale detail
-    public int continentalOctaves = 3;
+    public int heightVariation = 40;    // ±blocks from base height (more dramatic terrain)
+    public double continentalFreq = 0.0015; // slightly lower freq = broader terrain features
+    public double detailFreq = 0.012;       // small-scale detail (slightly more variation)
+    public int continentalOctaves = 4;      // more octaves = more detail
     public int detailOctaves = 3;
 
     // --- Surface ---
     public int dirtDepth = 4;           // dirt layers below grass
-    public int mountainThreshold = 85;  // height above which stone is exposed
-    public int beachDepth = 2;          // sand depth at beaches
+    public int mountainThreshold = 90;  // height above which stone is exposed
+    public int beachDepth = 3;          // sand depth at beaches (wider beaches)
 
     // --- Caves ---
-    public double caveFreq = 0.04;          // 3D noise frequency for caves
-    public double caveThreshold = 0.55;     // noise value above which = cave
+    public double caveFreq = 0.035;         // 3D noise frequency for caves (more varied caves)
+    public double caveThreshold = 0.50;     // slightly easier to form caves
     public int caveMinY = 5;                // minimum cave floor
-    public int caveSurfaceMargin = 4;       // blocks below surface to avoid breaking through
+    public int caveSurfaceMargin = 5;       // blocks below surface to avoid breaking through
 
     // --- Ores ---
     public int coalMinY = 5, coalMaxY = 80, coalVeinSize = 10, coalAttemptsPerChunk = 20;

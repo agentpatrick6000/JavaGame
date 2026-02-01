@@ -37,11 +37,22 @@ public class TreesPass implements GenPipeline.GenerationPass {
                 // Find the surface height
                 int height = context.getTerrainHeight(worldX, worldZ);
 
-                // Must be above sea level
-                if (height <= WorldConstants.SEA_LEVEL) continue;
+                // Must be at least 3 blocks above sea level (no beach trees)
+                if (height <= WorldConstants.SEA_LEVEL + 2) continue;
 
-                // Check that the surface block is grass
-                if (chunk.getBlock(lx, height, lz) != Blocks.GRASS.id()) continue;
+                // Check that the surface block is grass (not sand, stone, water, etc.)
+                int surfBlock = chunk.getBlock(lx, height, lz);
+                if (surfBlock != Blocks.GRASS.id()) continue;
+
+                // Extra check: no sand/water neighbors (no trees on beach edges)
+                boolean nearBeach = false;
+                for (int dx = -1; dx <= 1 && !nearBeach; dx++) {
+                    for (int dz2 = -1; dz2 <= 1 && !nearBeach; dz2++) {
+                        int nh = context.getTerrainHeight(worldX + dx, worldZ + dz2);
+                        if (nh <= WorldConstants.SEA_LEVEL + 1) nearBeach = true;
+                    }
+                }
+                if (nearBeach) continue;
 
                 // Check slope — look at neighboring terrain heights
                 int hN = context.getTerrainHeight(worldX, worldZ - 1);
