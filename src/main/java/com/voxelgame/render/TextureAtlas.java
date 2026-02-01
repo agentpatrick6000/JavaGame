@@ -14,7 +14,7 @@ public class TextureAtlas {
 
     private static final int TILE_SIZE = 16;
     private static final int TILES_PER_ROW = 8;
-    private static final int TILE_COUNT = 19; // 0-18 (includes mob drop items)
+    private static final int TILE_COUNT = 22; // 0-21 (includes crafted blocks)
     private static final int ATLAS_WIDTH = TILES_PER_ROW * TILE_SIZE;  // 128
     private static final int ATLAS_HEIGHT = ((TILE_COUNT + TILES_PER_ROW - 1) / TILES_PER_ROW) * TILE_SIZE; // 48
 
@@ -78,6 +78,9 @@ public class TextureAtlas {
             case 16 -> generateBedrock(pixels, baseX, baseY);
             case 17 -> generateSolidColor(pixels, baseX, baseY, 242, 140, 128); // raw porkchop
             case 18 -> generateSolidColor(pixels, baseX, baseY, 140, 102, 64);  // rotten flesh
+            case 19 -> generatePlanks(pixels, baseX, baseY);
+            case 20 -> generateCraftingTableTop(pixels, baseX, baseY);
+            case 21 -> generateCraftingTableSide(pixels, baseX, baseY);
         }
     }
 
@@ -240,6 +243,48 @@ public class TextureAtlas {
             for (int x = 0; x < TILE_SIZE; x++) {
                 int v = 40 + (hash(x, y) & 31);
                 setPixel(buf, bx + x, by + y, v, v, v, 255);
+            }
+    }
+
+    private void generatePlanks(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 7) - 4;
+                int stripe = (y % 4 == 0) ? -20 : 0;
+                int grain = ((x + y / 3) & 3) < 1 ? -8 : 0;
+                setPixel(buf, bx + x, by + y,
+                    180 + noise + stripe + grain,
+                    140 + noise + stripe + grain,
+                    76 + noise + stripe + grain, 255);
+            }
+    }
+
+    private void generateCraftingTableTop(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 7) - 4;
+                boolean gridLine = (x == 7 || x == 8 || y == 7 || y == 8);
+                if (gridLine) {
+                    setPixel(buf, bx + x, by + y, 80 + noise, 60 + noise, 35 + noise, 255);
+                } else {
+                    setPixel(buf, bx + x, by + y, 170 + noise, 130 + noise, 70 + noise, 255);
+                }
+            }
+    }
+
+    private void generateCraftingTableSide(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 7) - 4;
+                boolean hasTool = (x >= 3 && x <= 5 && y >= 2 && y <= 10) ||
+                                  (x >= 10 && x <= 12 && y >= 2 && y <= 10) ||
+                                  (x >= 2 && x <= 6 && y >= 2 && y <= 4) ||
+                                  (x >= 9 && x <= 13 && y >= 2 && y <= 4);
+                if (hasTool) {
+                    setPixel(buf, bx + x, by + y, 120 + noise, 90 + noise, 50 + noise, 255);
+                } else {
+                    setPixel(buf, bx + x, by + y, 160 + noise, 120 + noise, 65 + noise, 255);
+                }
             }
     }
 

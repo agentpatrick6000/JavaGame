@@ -38,11 +38,29 @@ public final class Blocks {
     public static final Block RAW_PORKCHOP = new Block(15, "raw_porkchop", false, true,  new int[]{17},                 0.0f, -1);  // pig drop
     public static final Block ROTTEN_FLESH = new Block(16, "rotten_flesh", false, true,  new int[]{18},                 0.0f, -1);  // zombie drop
 
+    // ---- Crafted blocks (solid, placeable) ----
+    public static final Block PLANKS         = new Block(17, "planks",         true,  false, new int[]{19},                 2.0f, -1);
+    public static final Block CRAFTING_TABLE = new Block(18, "crafting_table", true,  false, new int[]{20, 20, 21, 21, 21, 21}, 2.5f, -1);
+
+    // ---- Crafting material items (non-solid, non-placeable) ----
+    public static final Block STICK          = new Block(19, "stick",          false, true,  new int[]{0},                  0.0f, -1);
+
+    // ---- Tool items (non-solid, non-placeable) ----
+    public static final Block WOODEN_PICKAXE = new Block(20, "wooden_pickaxe", false, true, new int[]{0},                  0.0f, -1);
+    public static final Block WOODEN_AXE     = new Block(21, "wooden_axe",     false, true, new int[]{0},                  0.0f, -1);
+    public static final Block WOODEN_SHOVEL  = new Block(22, "wooden_shovel",  false, true, new int[]{0},                  0.0f, -1);
+    public static final Block STONE_PICKAXE  = new Block(23, "stone_pickaxe",  false, true, new int[]{0},                  0.0f, -1);
+    public static final Block STONE_AXE      = new Block(24, "stone_axe",      false, true, new int[]{0},                  0.0f, -1);
+    public static final Block STONE_SHOVEL   = new Block(25, "stone_shovel",   false, true, new int[]{0},                  0.0f, -1);
+
     /** All blocks indexed by ID for fast lookup. */
     private static final Block[] REGISTRY = {
         AIR, STONE, COBBLESTONE, DIRT, GRASS, SAND, GRAVEL,
         LOG, LEAVES, WATER, COAL_ORE, IRON_ORE, GOLD_ORE, DIAMOND_ORE, BEDROCK,
-        RAW_PORKCHOP, ROTTEN_FLESH
+        RAW_PORKCHOP, ROTTEN_FLESH,
+        PLANKS, CRAFTING_TABLE, STICK,
+        WOODEN_PICKAXE, WOODEN_AXE, WOODEN_SHOVEL,
+        STONE_PICKAXE, STONE_AXE, STONE_SHOVEL
     };
 
     /**

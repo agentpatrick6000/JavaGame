@@ -162,11 +162,12 @@ public class Controller {
     private void handleInventoryToggle() {
         if (Input.isKeyPressed(GLFW_KEY_E)) {
             if (inventoryScreen != null) {
-                inventoryScreen.toggle();
                 if (inventoryScreen.isOpen()) {
-                    Input.unlockCursor();
-                } else {
+                    inventoryScreen.close(player.getInventory());
                     Input.lockCursor();
+                } else {
+                    inventoryScreen.setVisible(true);
+                    Input.unlockCursor();
                 }
             }
         }

@@ -23,6 +23,8 @@ import com.voxelgame.sim.ItemEntityManager;
 import com.voxelgame.sim.MobSpawner;
 import com.voxelgame.sim.Physics;
 import com.voxelgame.sim.Player;
+import com.voxelgame.sim.ToolItem;
+import com.voxelgame.sim.Inventory;
 import com.voxelgame.ui.BitmapFont;
 import com.voxelgame.ui.DeathScreen;
 import com.voxelgame.ui.DebugOverlay;
@@ -706,7 +708,7 @@ public class GameLoop {
         // Handle ESC → pause
         if (Input.isKeyPressed(GLFW_KEY_ESCAPE)) {
             if (inventoryScreen != null && inventoryScreen.isOpen()) {
-                inventoryScreen.close();
+                inventoryScreen.close(player.getInventory());
                 Input.lockCursor();
             } else {
                 pauseGame();
@@ -766,10 +768,14 @@ public class GameLoop {
             hud.setBreakProgress(0);
         }
 
-        // Inventory clicks
-        if (inventoryScreen.isVisible() && Input.isLeftMouseClicked()) {
-            inventoryScreen.handleClick(player.getInventory(),
-                Input.getMouseX(), Input.getMouseY(), w, h);
+        // Inventory clicks + mouse tracking
+        if (inventoryScreen.isVisible()) {
+            inventoryScreen.updateMouse(Input.getMouseX(), Input.getMouseY(), h);
+            if (Input.isLeftMouseClicked()) {
+                inventoryScreen.handleClick(player.getInventory(),
+                    Input.getMouseX(), Input.getMouseY(), w, h,
+                    Input.isKeyDown(GLFW_KEY_LEFT_SHIFT));
+            }
         }
 
         // Agent state broadcast
@@ -909,10 +915,28 @@ public class GameLoop {
                     }
                 } else {
                     float breakTime = block.getBreakTime();
+
+                    // Apply tool effectiveness multiplier
+                    Inventory.ItemStack heldTool = player.getInventory().getSlot(player.getSelectedSlot());
+                    int toolBlockId = (heldTool != null && !heldTool.isEmpty()) ? heldTool.getBlockId() : 0;
+                    float toolMultiplier = ToolItem.getEffectiveness(toolBlockId, blockId);
+                    if (toolMultiplier > 1.0f) {
+                        breakTime /= toolMultiplier;
+                    }
+
                     float progress = controller.updateBreaking(bx, by, bz, breakTime, dt);
                     hud.setBreakProgress(progress);
 
                     if (progress >= 1.0f) {
+                        // Damage tool on successful break
+                        if (heldTool != null && heldTool.hasDurability()) {
+                            boolean broke = heldTool.damageTool(1);
+                            if (broke) {
+                                player.getInventory().setSlot(player.getSelectedSlot(), null);
+                                System.out.println("[Tool] Tool broke!");
+                            }
+                        }
+
                         breakBlock(bx, by, bz, blockId, true);
                         controller.resetBreaking();
                         hud.setBreakProgress(0);
@@ -945,7 +969,7 @@ public class GameLoop {
             int pz = currentHit.z() + currentHit.nz();
             int placedBlockId = player.getSelectedBlock();
 
-            if (placedBlockId > 0) {
+            if (placedBlockId > 0 && Blocks.get(placedBlockId).solid()) {
                 boolean canPlace;
 
                 if (isCreative) {

@@ -5,6 +5,7 @@ import com.voxelgame.sim.BlockBreakProgress;
 import com.voxelgame.sim.GameMode;
 import com.voxelgame.sim.Inventory;
 import com.voxelgame.sim.Player;
+import com.voxelgame.sim.ToolItem;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryStack;
 
@@ -40,21 +41,32 @@ public class Hud {
     private static final float BREAK_BAR_OFFSET_Y = 20.0f;
 
     private static final float[][] BLOCK_COLORS = {
-        {0.0f, 0.0f, 0.0f, 0.0f},       // 0 AIR
-        {0.47f, 0.47f, 0.47f, 1.0f},     // 1 STONE
-        {0.39f, 0.39f, 0.39f, 1.0f},     // 2 COBBLESTONE
-        {0.53f, 0.38f, 0.26f, 1.0f},     // 3 DIRT
-        {0.30f, 0.60f, 0.00f, 1.0f},     // 4 GRASS
-        {0.84f, 0.81f, 0.60f, 1.0f},     // 5 SAND
-        {0.51f, 0.49f, 0.49f, 1.0f},     // 6 GRAVEL
-        {0.39f, 0.27f, 0.16f, 1.0f},     // 7 LOG
-        {0.20f, 0.51f, 0.04f, 0.9f},     // 8 LEAVES
-        {0.12f, 0.31f, 0.78f, 0.6f},     // 9 WATER
+        {0.0f, 0.0f, 0.0f, 0.0f},       //  0 AIR
+        {0.47f, 0.47f, 0.47f, 1.0f},     //  1 STONE
+        {0.39f, 0.39f, 0.39f, 1.0f},     //  2 COBBLESTONE
+        {0.53f, 0.38f, 0.26f, 1.0f},     //  3 DIRT
+        {0.30f, 0.60f, 0.00f, 1.0f},     //  4 GRASS
+        {0.84f, 0.81f, 0.60f, 1.0f},     //  5 SAND
+        {0.51f, 0.49f, 0.49f, 1.0f},     //  6 GRAVEL
+        {0.39f, 0.27f, 0.16f, 1.0f},     //  7 LOG
+        {0.20f, 0.51f, 0.04f, 0.9f},     //  8 LEAVES
+        {0.12f, 0.31f, 0.78f, 0.6f},     //  9 WATER
         {0.35f, 0.35f, 0.35f, 1.0f},     // 10 COAL_ORE
         {0.55f, 0.45f, 0.35f, 1.0f},     // 11 IRON_ORE
         {0.75f, 0.65f, 0.20f, 1.0f},     // 12 GOLD_ORE
         {0.39f, 0.86f, 1.00f, 1.0f},     // 13 DIAMOND_ORE
         {0.16f, 0.16f, 0.16f, 1.0f},     // 14 BEDROCK
+        {0.95f, 0.55f, 0.50f, 1.0f},     // 15 RAW_PORKCHOP
+        {0.55f, 0.40f, 0.25f, 1.0f},     // 16 ROTTEN_FLESH
+        {0.70f, 0.55f, 0.30f, 1.0f},     // 17 PLANKS
+        {0.60f, 0.45f, 0.25f, 1.0f},     // 18 CRAFTING_TABLE
+        {0.65f, 0.50f, 0.25f, 1.0f},     // 19 STICK
+        {0.58f, 0.42f, 0.20f, 1.0f},     // 20 WOODEN_PICKAXE
+        {0.55f, 0.40f, 0.18f, 1.0f},     // 21 WOODEN_AXE
+        {0.52f, 0.38f, 0.16f, 1.0f},     // 22 WOODEN_SHOVEL
+        {0.50f, 0.50f, 0.52f, 1.0f},     // 23 STONE_PICKAXE
+        {0.48f, 0.48f, 0.50f, 1.0f},     // 24 STONE_AXE
+        {0.46f, 0.46f, 0.48f, 1.0f},     // 25 STONE_SHOVEL
     };
 
     private Shader uiShader;
@@ -211,18 +223,35 @@ public class Hud {
             if (bid > 0 && bid < BLOCK_COLORS.length && stack != null && !stack.isEmpty()) {
                 float[] c = BLOCK_COLORS[bid];
                 float off = (SLOT_SIZE - PREVIEW_SIZE) / 2f;
-                fillRect(sx + off, y0 + off, PREVIEW_SIZE, PREVIEW_SIZE, c[0], c[1], c[2], c[3]);
 
-                // Show item count as bar indicator in survival mode
-                if (player.getGameMode() != GameMode.CREATIVE && stack.getCount() < Inventory.MAX_STACK) {
-                    float countFrac = (float) stack.getCount() / Inventory.MAX_STACK;
-                    float barH = 3.0f;
-                    fillRect(sx + 2, y0 + 2, (SLOT_SIZE - 4) * countFrac, barH,
-                             0.2f, 0.8f, 0.2f, 0.7f);
+                if (stack.hasDurability()) {
+                    // Tool: render with distinctive shape
+                    float headH = PREVIEW_SIZE * 0.5f;
+                    float handleW = PREVIEW_SIZE * 0.25f;
+                    float handleH = PREVIEW_SIZE * 0.5f;
+                    fillRect(sx + off, y0 + off + handleH, PREVIEW_SIZE, headH, c[0], c[1], c[2], c[3]);
+                    float hx = sx + off + (PREVIEW_SIZE - handleW) / 2;
+                    fillRect(hx, y0 + off, handleW, handleH, 0.5f, 0.35f, 0.15f, 1.0f);
+                    float durFrac = stack.getDurabilityFraction();
+                    if (durFrac >= 0 && durFrac < 1.0f) {
+                        float barH = 3.0f;
+                        fillRect(sx + 2, y0 + 2, SLOT_SIZE - 4, barH, 0.1f, 0.1f, 0.1f, 0.7f);
+                        float dr = durFrac < 0.5f ? 1.0f : durFrac * 2 - 1;
+                        float dg = durFrac > 0.5f ? 1.0f : durFrac * 2;
+                        fillRect(sx + 2, y0 + 2, (SLOT_SIZE - 4) * durFrac, barH, dr, dg, 0.2f, 0.9f);
+                    }
+                } else {
+                    fillRect(sx + off, y0 + off, PREVIEW_SIZE, PREVIEW_SIZE, c[0], c[1], c[2], c[3]);
+                    if (player.getGameMode() != GameMode.CREATIVE && stack.getCount() < Inventory.MAX_STACK) {
+                        float countFrac = (float) stack.getCount() / Inventory.MAX_STACK;
+                        float barH = 3.0f;
+                        fillRect(sx + 2, y0 + 2, (SLOT_SIZE - 4) * countFrac, barH,
+                                 0.2f, 0.8f, 0.2f, 0.7f);
+                    }
                 }
 
                 // Render numeric count using BitmapFont
-                if (stack.getCount() > 1 && player.getGameMode() != GameMode.CREATIVE && font != null) {
+                if (!stack.hasDurability() && stack.getCount() > 1 && player.getGameMode() != GameMode.CREATIVE && font != null) {
                     uiShader.unbind();
                     String countStr = String.valueOf(stack.getCount());
                     float textX = sx + SLOT_SIZE - 6 - countStr.length() * 7;

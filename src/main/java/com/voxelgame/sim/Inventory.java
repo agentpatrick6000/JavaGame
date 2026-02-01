@@ -15,26 +15,56 @@ public class Inventory {
     public static final int MAX_STACK = 64;
 
     /**
-     * An item stack: block ID + count.
+     * An item stack: block ID + count + optional durability (for tools).
+     * Tools are unstackable (max count = 1).
      */
     public static class ItemStack {
         private int blockId;
         private int count;
+        private int durability = -1;    // -1 = not a tool
+        private int maxDurability = -1;
 
         public ItemStack(int blockId, int count) {
             this.blockId = blockId;
             this.count = Math.min(count, MAX_STACK);
         }
 
+        /** Create a tool item stack with durability. */
+        public ItemStack(int blockId, int durability, int maxDurability) {
+            this.blockId = blockId;
+            this.count = 1;
+            this.durability = durability;
+            this.maxDurability = maxDurability;
+        }
+
         public int getBlockId() { return blockId; }
         public int getCount() { return count; }
+        public int getDurability() { return durability; }
+        public int getMaxDurability() { return maxDurability; }
 
-        public void setCount(int count) { this.count = Math.min(count, MAX_STACK); }
+        public void setCount(int count) { this.count = Math.min(count, getMaxStack()); }
         public void setBlockId(int blockId) { this.blockId = blockId; }
+        public void setDurability(int d) { this.durability = d; }
+        public void setMaxDurability(int d) { this.maxDurability = d; }
+
+        public boolean hasDurability() { return durability >= 0; }
+        public int getMaxStack() { return hasDurability() ? 1 : MAX_STACK; }
+
+        public float getDurabilityFraction() {
+            if (maxDurability <= 0) return -1;
+            return (float) durability / maxDurability;
+        }
+
+        public boolean damageTool(int amount) {
+            if (durability < 0) return false;
+            durability = Math.max(0, durability - amount);
+            return durability <= 0;
+        }
 
         /** Add to this stack. Returns leftover that didn't fit. */
         public int add(int amount) {
-            int canFit = MAX_STACK - count;
+            int max = getMaxStack();
+            int canFit = max - count;
             int added = Math.min(amount, canFit);
             count += added;
             return amount - added;
@@ -47,13 +77,19 @@ public class Inventory {
             return removed;
         }
 
-        public boolean isFull() { return count >= MAX_STACK; }
+        public boolean isFull() { return count >= getMaxStack(); }
         public boolean isEmpty() { return count <= 0; }
 
-        public ItemStack copy() { return new ItemStack(blockId, count); }
+        public ItemStack copy() {
+            ItemStack c = new ItemStack(blockId, count);
+            c.durability = this.durability;
+            c.maxDurability = this.maxDurability;
+            return c;
+        }
 
         @Override
         public String toString() {
+            if (durability >= 0) return "ItemStack{" + blockId + " dur=" + durability + "/" + maxDurability + "}";
             return "ItemStack{" + blockId + " x" + count + "}";
         }
     }
@@ -67,25 +103,49 @@ public class Inventory {
     public int addItem(int blockId, int count) {
         if (blockId <= 0 || count <= 0) return 0;
 
+        boolean isTool = ToolItem.isTool(blockId);
         int remaining = count;
 
-        // First pass: try to stack with existing items (hotbar then storage)
-        for (int i = 0; i < TOTAL_SIZE && remaining > 0; i++) {
-            if (slots[i] != null && slots[i].getBlockId() == blockId && !slots[i].isFull()) {
-                remaining = slots[i].add(remaining);
+        if (!isTool) {
+            for (int i = 0; i < TOTAL_SIZE && remaining > 0; i++) {
+                if (slots[i] != null && slots[i].getBlockId() == blockId
+                        && !slots[i].isFull() && !slots[i].hasDurability()) {
+                    remaining = slots[i].add(remaining);
+                }
             }
         }
 
-        // Second pass: fill empty slots (hotbar first)
         for (int i = 0; i < TOTAL_SIZE && remaining > 0; i++) {
             if (slots[i] == null || slots[i].isEmpty()) {
-                int toPlace = Math.min(remaining, MAX_STACK);
-                slots[i] = new ItemStack(blockId, toPlace);
-                remaining -= toPlace;
+                if (isTool) {
+                    int maxDur = ToolItem.getMaxDurability(blockId);
+                    slots[i] = new ItemStack(blockId, maxDur, maxDur);
+                    remaining--;
+                } else {
+                    int toPlace = Math.min(remaining, MAX_STACK);
+                    slots[i] = new ItemStack(blockId, toPlace);
+                    remaining -= toPlace;
+                }
             }
         }
 
         return remaining;
+    }
+
+    /** Add a pre-built ItemStack (preserves durability for tools). */
+    public int addItemStack(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return 0;
+        if (stack.hasDurability()) {
+            for (int i = 0; i < TOTAL_SIZE; i++) {
+                if (slots[i] == null || slots[i].isEmpty()) {
+                    slots[i] = stack.copy();
+                    return 0;
+                }
+            }
+            return 1;
+        } else {
+            return addItem(stack.getBlockId(), stack.getCount());
+        }
     }
 
     /**
