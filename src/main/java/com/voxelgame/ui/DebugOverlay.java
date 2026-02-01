@@ -1,5 +1,6 @@
 package com.voxelgame.ui;
 
+import com.voxelgame.sim.Inventory;
 import com.voxelgame.sim.Player;
 import com.voxelgame.world.World;
 import com.voxelgame.world.WorldConstants;
@@ -44,28 +45,28 @@ public class DebugOverlay {
         return visible;
     }
 
+    /** Backward-compatible overload (no item entity count). */
+    public void render(Player player, World world, int fps, int screenW, int screenH, boolean sprinting) {
+        render(player, world, fps, screenW, screenH, sprinting, 0);
+    }
+
     /**
      * Render debug text overlay.
      */
-    public void render(Player player, World world, int fps, int screenW, int screenH, boolean sprinting) {
+    public void render(Player player, World world, int fps, int screenW, int screenH,
+                       boolean sprinting, int itemEntityCount) {
         if (!visible) return;
-
-        // GL state (depth test off, blend on) is managed by GameLoop
 
         Vector3f pos = player.getPosition();
         float yaw   = player.getCamera().getYaw();
         float pitch  = player.getCamera().getPitch();
 
-        // Compute chunk coordinates
         int cx = Math.floorDiv((int) Math.floor(pos.x), WorldConstants.CHUNK_SIZE);
         int cz = Math.floorDiv((int) Math.floor(pos.z), WorldConstants.CHUNK_SIZE);
         int loadedChunks = world.getChunkMap().size();
 
-        // Compute facing direction name
         String facing = getFacingDirection(yaw);
 
-        // Build debug lines
-        // Compute feet position for display
         float feetY = pos.y - Player.EYE_HEIGHT;
 
         String[] lines = {
@@ -80,6 +81,8 @@ public class DebugOverlay {
             String.format("Facing: %s (yaw %.1f / pitch %.1f)", facing, yaw, pitch),
             String.format("Mode: %s  HP: %.1f/%.1f  (F4=cycle mode)",
                 player.getGameMode(), player.getHealth(), player.getMaxHealth()),
+            String.format("Inv: %d/%d slots  Items: %d  (E=inventory)",
+                player.getInventory().getUsedSlotCount(), Inventory.TOTAL_SIZE, itemEntityCount),
         };
 
         // Render each line with shadow for readability

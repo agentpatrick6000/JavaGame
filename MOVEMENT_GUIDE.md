@@ -1,311 +1,512 @@
 # Movement & Aiming Guide for VoxelGame Agent API
 
-> **Tested:** 2025-02-01  
-> **API version:** 1.0  
-> **Scripts:** `nav_test.py`, `aim_test.py`
+> **Generated:** 2025-07-13  
+> **Method:** Empirical testing via `nav_test.py` and `aim_test.py`  
+> **Game version:** AgentServer WebSocket on port 25566
 
 ---
 
-## 1. Aiming (action_look)
+## TL;DR — Quick Reference
 
-### Key Finding: Aiming is Perfect
+| Mechanic | Key Number | Notes |
+|----------|-----------|-------|
+| **Walk speed** | **~3.3 blocks/s** | Effective speed (not the 4.3 constant) |
+| **Sprint speed** | **~3.4 blocks/s** | Barely faster — likely a bug or friction issue |
+| **Look precision** | **< 0.02° error** | Single-shot, no correction needed |
+| **Rotation speed** | **Instant** | Even 360° applies in 1 tick |
+| **Stopping behavior** | **Instant stop** | Zero coast/overshoot when move expires |
+| **Correction loop** | **1 iteration** | Converges on first shot |
+| **Duration → Distance** | **~0.75 × WALK_SPEED × seconds** | See calibration table below |
+| **Jump height** | **~1.19 blocks** | Peak at tick 6 (~300ms), lands at tick 12 |
+| **Eye height** | **1.62 blocks** above ground | `ground_y = floor(eye_y - 1.62)` |
 
-The `action_look` command applies **exact delta yaw/pitch** with **zero overshoot**. In all tests:
+---
 
-| Test | Yaw Error | Pitch Error | Correction Steps |
-|------|-----------|-------------|------------------|
-| 5 blocks above (pitch 89°) | 0.000° | 0.000° | 0 |
-| 3 blocks below (pitch -72°) | 0.000° | 0.000° | 0 |
-| 45° diagonal | 0.000° | 0.000° | 0 |
-| 180° turn (behind player) | 0.000° | 0.000° | 0 |
-| Ground block (complex angle) | 0.001° | 0.000° | 0 |
-| Precision sweep (0°–180° offsets) | 0.000° | 0.000° | 0 |
-| After 360° spin | 0.000° | 0.000° | 0 |
+## 1. Looking (action_look)
 
-**Bottom line:** Single-shot aiming is sufficient. Correction loops are unnecessary but harmless as a safety net.
+### How It Works
 
-### Formula: Look at World Position
+`action_look` sends **delta** yaw and pitch values that are added to the current camera angles.
+
+```json
+{"type": "action_look", "yaw": 45.0, "pitch": -10.0}
+```
+
+- **Yaw delta:** Added to current yaw (positive = turn right in world space)
+- **Pitch delta:** Added to current pitch (positive = look up, negative = look down)
+- **Application:** Instant. Applied within the same game frame.
+- **No interpolation, no speed limit, no animation delay.**
+
+### Precision: Perfect
+
+| Metric | Value |
+|--------|-------|
+| Yaw error after single action | **0.000°** |
+| Pitch error after single action | **0.000°** |
+| Max residual from look-at calc | **< 0.02°** |
+
+action_look applies the EXACT delta you send. There is no rounding, no smoothing, no momentum. This means:
+
+- **You do NOT need a correction loop for looking.** One shot is sufficient.
+- The house_builder.py `max_attempts=5` correction loop is overkill.
+
+### Rotation Speed: Unlimited
+
+Tested deltas from 10° to 360° — all apply instantly within 1 tick (50ms):
+
+```
+Δ 10° → applied in 1 tick ✅
+Δ 45° → applied in 1 tick ✅
+Δ 90° → applied in 1 tick ✅
+Δ180° → applied in 1 tick ✅
+Δ270° → applied in 1 tick ✅
+Δ360° → applied in 1 tick ✅
+```
+
+**You can spin 360° in a single action.** No need to break large rotations into smaller steps.
+
+### Yaw Accumulation Warning
+
+⚠️ **Yaw is NOT normalized to -180°..180°.** It accumulates indefinitely:
+
+```
+Initial yaw: -90.00°
+After +45°: -45.00°
+After +45°: 0.00°
+After +45°: 45.00°
+... eventually: 1338.69° (after many rotations)
+```
+
+This doesn't affect gameplay (cos/sin handle any angle), but your delta calculations must normalize to -180°..180°:
+
+```python
+delta_yaw = target_yaw - current_yaw
+while delta_yaw > 180: delta_yaw -= 360
+while delta_yaw < -180: delta_yaw += 360
+```
+
+### Camera Math (from Camera.java)
+
+```
+front.x = cos(pitch) * cos(yaw)    ← yaw in radians
+front.y = sin(pitch)
+front.z = cos(pitch) * sin(yaw)
+```
+
+**To look at target (tx, ty, tz) from camera (cx, cy, cz):**
 
 ```python
 import math
 
-def calc_look_deltas(player_x, player_y, player_z, cur_yaw, cur_pitch,
-                     target_x, target_y, target_z):
-    """
-    Calculate (delta_yaw, delta_pitch) to look from player eye at target.
+dx = tx - cx
+dy = ty - cy
+dz = tz - cz
+horiz_dist = math.sqrt(dx*dx + dz*dz)
+
+target_yaw = math.degrees(math.atan2(dz, dx))
+target_pitch = math.degrees(math.atan2(dy, horiz_dist))
+target_pitch = max(-89.0, min(89.0, target_pitch))
+
+delta_yaw = target_yaw - current_yaw
+delta_pitch = target_pitch - current_pitch
+# Normalize delta_yaw to -180..180
+while delta_yaw > 180: delta_yaw -= 360
+while delta_yaw < -180: delta_yaw += 360
+```
+
+### Best Practice: look_at in 1 Shot
+
+```python
+async def look_at(self, tx, ty, tz):
+    """Look at target. Single shot — no correction loop needed."""
+    dx = tx - self.pose['x']
+    dy = ty - self.pose['y']
+    dz = tz - self.pose['z']
+    horiz = math.sqrt(dx*dx + dz*dz)
     
-    Game conventions:
-      yaw  = atan2(dz, dx) in degrees
-      pitch up = positive, pitch down = negative
-      Pitch clamped to [-89, 89]
-      action_look sends DELTAS added to current angles
-    """
-    dx = target_x - player_x
-    dy = target_y - player_y
-    dz = target_z - player_z
-    
-    h_dist = math.sqrt(dx*dx + dz*dz)
-    
-    if h_dist < 0.001:
-        # Directly above/below — keep current yaw
-        target_yaw = cur_yaw
-        target_pitch = 89.0 if dy > 0 else -89.0
-    else:
-        target_yaw = math.degrees(math.atan2(dz, dx))
-        target_pitch = math.degrees(math.atan2(dy, h_dist))
-    
+    target_yaw = math.degrees(math.atan2(dz, dx))
+    target_pitch = math.degrees(math.atan2(dy, horiz)) if horiz > 0.001 else (89 if dy > 0 else -89)
     target_pitch = max(-89.0, min(89.0, target_pitch))
     
-    # Delta with yaw normalization to -180..180
-    delta_yaw = target_yaw - cur_yaw
-    while delta_yaw > 180:  delta_yaw -= 360
-    while delta_yaw < -180: delta_yaw += 360
+    dyaw = target_yaw - self.pose['yaw']
+    dpitch = target_pitch - self.pose['pitch']
+    while dyaw > 180: dyaw -= 360
+    while dyaw < -180: dyaw += 360
     
-    delta_pitch = target_pitch - cur_pitch
-    
-    return delta_yaw, delta_pitch
+    await self.send_action({"type": "action_look", "yaw": dyaw, "pitch": dpitch})
+    await self.wait_ticks(2)  # let state update propagate
 ```
 
-### Usage
+Only add a correction loop if you need sub-0.02° precision (you don't).
+
+---
+
+## 2. Movement (action_move)
+
+### How It Works
+
+```json
+{"type": "action_move", "forward": 1.0, "strafe": 0.0, "duration": 1000}
+```
+
+- **forward:** -1.0 (backward) to 1.0 (forward) along camera's flat-front direction
+- **strafe:** -1.0 (left) to 1.0 (right) along camera's flat-right direction
+- **duration:** milliseconds the input is active
+- **Physics:** Acceleration + friction model (not instant velocity)
+- **Terrain collision:** Movement is blocked/redirected by solid blocks
+
+### Effective Walk Speed: ~3.3 blocks/s
+
+**Not 4.3 blocks/s** as the constant suggests. The acceleration/friction model results in a lower effective speed:
+
+| Game Constant | Value | Notes |
+|--------------|-------|-------|
+| WALK_SPEED | 4.3 blocks/s | Theoretical max speed |
+| SPRINT_MULTIPLIER | 1.5 | Should give 6.45 b/s sprinting |
+| GROUND_ACCEL | 60.0 | Acceleration force |
+| GROUND_FRICTION | 18.0 | Very high friction |
+| **Measured walk** | **~3.3 blocks/s** | Actual steady-state |
+| **Measured sprint** | **~3.4 blocks/s** | Barely faster (possible bug) |
+
+### Duration → Distance Calibration Table
+
+Measured empirically (walk, flat terrain, no obstacles):
+
+| Duration (ms) | Expected (4.3 b/s) | **Actual** | Ratio | b/s |
+|--------------|--------------------:|----------:|---------:|--------:|
+| 100 | 0.430 | **0.226** | 0.526 | 2.26 |
+| 200 | 0.860 | **0.546** | 0.635 | 2.73 |
+| 300 | 1.290 | **1.007** | 0.781 | 3.36 |
+| 500 | 2.150 | **1.545** | 0.719 | 3.09 |
+| 750 | 3.225 | **2.380** | 0.738 | 3.17 |
+| 1000 | 4.300 | **3.211** | 0.747 | 3.21 |
+| 1500 | 6.450 | **4.875** | 0.756 | 3.25 |
+| 2000 | 8.600 | **6.582** | 0.765 | 3.29 |
+
+**Quick estimation formula:**
+
+```
+distance ≈ 3.3 × (duration_seconds)         for duration > 300ms
+distance ≈ 2.5 × (duration_seconds)         for duration < 300ms (acceleration phase)
+```
+
+Or more precisely:
+```
+distance ≈ WALK_SPEED × duration_seconds × 0.75
+```
+
+### To walk N blocks:
 
 ```python
-dy, dp = calc_look_deltas(
-    pose['x'], pose['y'], pose['z'],
-    pose['yaw'], pose['pitch'],
-    target_x, target_y, target_z
-)
-await ws.send(json.dumps({"type": "action_look", "yaw": dy, "pitch": dp}))
-# Wait 2 ticks (~100ms) for state to settle
-await recv_state()
-await recv_state()
+duration_ms = int(N / 3.3 * 1000)   # rough estimate
+# Or more conservative (better for small distances):
+duration_ms = int(N / 3.0 * 1000)   # leaves margin for acceleration
 ```
 
-### Best Practices — Aiming
+### Acceleration Phase
 
-1. **Single-shot is enough.** No correction loop needed.
-2. **Always normalize yaw delta** to -180..180 before sending.
-3. **Wait 2 state ticks** after action_look before reading raycast.
-4. **Pitch clamp to ±89°** — the game clamps internally but your math should too.
-5. **Use block center coordinates** (e.g., `block_x + 0.5, block_y + 0.5`) for aiming at blocks.
-6. **Yaw accumulates** in the game state (you may see 540° instead of 180°). This is fine — the delta math handles it.
+The first ~3-4 ticks (~150-200ms) have lower speed as the player accelerates:
+
+```
+Tick-by-tick distance from start (500ms move):
+  tick 0: 0.051 blocks  (starting from zero)
+  tick 1: 0.171 blocks  (accelerating)
+  tick 2: 0.318 blocks  (accelerating)
+  tick 3: 0.478 blocks  (near steady state)
+  tick 4: 0.642 blocks  (steady state: ~0.165/tick)
+  tick 5: 0.964 blocks
+  ...
+  tick 10: 1.531 blocks (move ends, instant stop)
+  tick 11: 1.531 blocks (zero coast)
+```
+
+**Key observation:** ~0.165 blocks/tick at 20Hz = **3.3 blocks/s steady state**.
+
+### Stopping Behavior: INSTANT
+
+When the duration expires, the player stops **immediately**:
+
+- **Zero coast distance** (0.000 blocks after command ends)
+- **Zero deceleration ticks** (stops in the same tick)
+- The high GROUND_FRICTION (18.0) kills all velocity within one frame
+
+This means:
+- ✅ No need to compensate for overshoot
+- ✅ Duration accurately controls stopping point
+- ✅ Fine-grained positioning is possible with short durations
+
+### Sprint: Barely Effective (Possible Bug)
+
+Sprint via `action_sprint` showed minimal speed improvement:
+
+```
+Walk:   3.27 blocks/s  (2000ms test)
+Sprint: 3.39 blocks/s  (2000ms test)
+```
+
+Expected sprint = 6.45 b/s (1.5× walk). The measured 3.39 is only 3.6% faster than walk. **This may be a bug** in how agent sprint interacts with the physics model. Don't rely on sprint for speed.
+
+### Direction Accuracy: Perfect (on flat terrain)
+
+When moving on flat, obstacle-free terrain, direction accuracy is exact:
+
+```
+yaw=  0° → actual angle: 0.0°  ✅  (error: 0.0°)
+yaw= 45° → actual angle: 45.0° ✅  (error: 0.0°)
+yaw= 90° → actual angle: 90.0° ✅  (error: 0.0°)
+```
+
+⚠️ **Terrain collision redirects movement.** If the path has hills/walls, the player slides along them:
+
+```
+yaw=-90° → actual angle: 2.0°   ⚠️ (redirected by terrain)
+yaw=180° → actual angle: -122°  ⚠️ (redirected by terrain)
+```
+
+**Always re-check position after moving.** Don't assume you arrived at the intended destination.
 
 ---
 
-## 2. Navigation (action_move)
+## 3. Navigation (move_to_position)
 
-### Key Finding: Navigation Difficulty Depends on Terrain
-
-Navigation is the hard part. Unlike aiming, movement involves physics, collision, and terrain.
-
-### Measured Walking Speed
-
-| Condition | Speed | Notes |
-|-----------|-------|-------|
-| Walking (forward=1.0) | **~1.16 blocks/sec** | Measured on flat sand |
-| Sprinting (toggle) | ~1.7-2.0 blocks/sec | Estimated from longer runs |
-
-**Note:** These speeds are MUCH slower than the 4.3 blocks/sec suggested in the operator guide. Actual in-game physics may vary.
-
-### Test Results
-
-| Test | Distance | Final Error | Time | Corrections | Notes |
-|------|----------|-------------|------|-------------|-------|
-| 10 blocks N (flat) | 10.0 | 0.57 | ~5s | 6 | Clean run |
-| 20 blocks E (terrain) | 20.0 | 9.22 | 30+ | 30 (max) | Stuck on hills |
-| 30 blocks NE (terrain) | 30.0 | ~26 | timed out | 20+ | Oscillating path |
-| 3 blocks E (precision) | 3.0 | 0.25 | ~1s | 2 | Very clean |
-
-### Rotation Precision
-
-| Direction | Target Yaw | Actual Yaw | Error | Steps |
-|-----------|-----------|------------|-------|-------|
-| North (-Z) | -90° | -90.00° | 0.00° | 1 |
-| East (+X) | 0° | 0.00° | 0.00° | 1 |
-| South (+Z) | 90° | 90.00° | 0.00° | 1 |
-| West (-X) | 180° | 180.00° | 0.00° | 1 |
-
-Rotation is always perfect. Navigation problems are 100% due to terrain.
-
-### Navigation Strategy: Short-Burst Correction Loop
+### Algorithm
 
 ```python
-async def navigate_to(ws, pose, target_x, target_z, tolerance=1.0, max_steps=30):
-    """
-    Navigate to (target_x, target_z) using short bursts + corrections.
-    """
-    prev_x, prev_z = pose['x'], pose['z']
-    stuck_count = 0
+async def move_to_xz(self, tx, tz, tolerance=0.5, max_attempts=20):
+    """Navigate to target XZ coordinates."""
+    for attempt in range(max_attempts):
+        cx, cz = self.pose['x'], self.pose['z']
+        dist = math.sqrt((tx-cx)**2 + (tz-cz)**2)
+        
+        if dist < tolerance:
+            return True  # arrived
+        
+        # 1. Look toward target (level pitch)
+        self.look_at_xz(tx, tz)
+        
+        # 2. Walk forward (scale duration to remaining distance)
+        move_ms = min(int(dist / 3.3 * 1000 * 0.7), 3000)
+        move_ms = max(move_ms, 100)
+        
+        await self.move_forward(move_ms)
     
-    for step in range(max_steps):
-        cx, cz = pose['x'], pose['z']
-        remaining = distance(cx, cz, target_x, target_z)
-        
-        if remaining <= tolerance:
-            return True  # Arrived!
-        
-        # 1) Face target
-        target_yaw = math.degrees(math.atan2(target_z - cz, target_x - cx))
-        delta_yaw = normalize_angle(target_yaw - pose['yaw'])
-        await send({"type": "action_look", "yaw": delta_yaw, "pitch": -pose['pitch']})
-        await recv_state(); await recv_state()
-        
-        # 2) Walk — duration based on remaining distance
-        if remaining > 10:   walk_ms = 1500
-        elif remaining > 5:  walk_ms = 1000
-        elif remaining > 2:  walk_ms = 500
-        else:                walk_ms = 250
-        
-        await send({"type": "action_move", "forward": 1.0, "strafe": 0.0,
-                     "duration": walk_ms})
-        
-        # Wait for completion
-        for _ in range(int(walk_ms / 50) + 3):
-            await recv_state()
-        
-        # 3) Check if stuck
-        moved = distance(prev_x, prev_z, pose['x'], pose['z'])
-        if moved < 0.3:
-            stuck_count += 1
-            if stuck_count >= 2:
-                # Jump + forward to clear obstacle
-                await send({"type": "action_jump"})
-                await recv_state()
-                await send({"type": "action_move", "forward": 1.0,
-                            "strafe": 0.0, "duration": 500})
-                for _ in range(15): await recv_state()
-                stuck_count = 0
-        else:
-            stuck_count = 0
-        
-        prev_x, prev_z = pose['x'], pose['z']
+    return False  # didn't reach in max_attempts
+```
+
+### Key Parameters
+
+| Parameter | Recommended | Notes |
+|-----------|-------------|-------|
+| **tolerance** | 0.5 blocks | Reliable convergence. Use 1.0 for coarse nav. |
+| **max_attempts** | 15-20 | 10 blocks takes ~16 attempts on rough terrain |
+| **duration scaling** | `dist / 3.3 * 0.7` | 0.7 factor prevents overshoot |
+| **max single move** | 3000ms | Cap to prevent going too far off-course |
+| **min single move** | 100ms | Below this, movement is negligible |
+
+### Performance
+
+Measured from test:
+
+| Route | Distance | Attempts | Time | Notes |
+|-------|----------|----------|------|-------|
+| 10 blocks east | 10 bl | 16 | 20.7s | Rough terrain, many corrections |
+
+**Navigation is slow.** ~2 blocks/second including look+move+settle overhead. For building tasks, minimize long-distance travel.
+
+### Terrain Challenges
+
+- **Hills:** Player can walk up 1-block steps automatically
+- **Cliffs:** Movement blocked, player slides along face
+- **Water:** Player sinks (no swim mechanics in API)
+- **Jump:** Use `action_jump` to clear 1-block obstacles
+
+---
+
+## 4. Jumping
+
+### Characteristics
+
+```
+Jump peak:    ~1.19 blocks above ground (at tick 6, ~300ms)
+Total time:   ~600ms (12 ticks) from jump to landing
+on_ground:    false during entire jump arc
+```
+
+### Jump-and-Place-Below (Pillar Technique)
+
+From house_builder.py — works for building upward:
+
+```python
+async def pillar_up(self):
+    """Jump and place block below feet at peak."""
+    await self.send_action({"type": "action_jump"})
+    await self.wait_ticks(4)     # reach near-peak
     
-    return False  # Didn't arrive within max_steps
-```
-
-### Best Practices — Navigation
-
-1. **Short bursts only.** Never send `duration > 1500ms`. Shorter = more corrections = better accuracy.
-2. **Re-face every step.** Always recalculate direction before each move burst.
-3. **Level pitch to 0** before walking. Walking while looking up/down doesn't help.
-4. **Detect stuck conditions.** If `moved < 0.3 blocks` after a walk, you're stuck.
-5. **Jump when stuck.** Send `action_jump` followed immediately by forward movement.
-6. **Strafe when stuck repeatedly.** If jumping doesn't help, try `strafe: 1.0` with `forward: 0.5` to go around the obstacle.
-7. **Don't use sprint toggle repeatedly.** `action_sprint toggle=true` is a TOGGLE — calling it twice turns sprint OFF. Set it once and leave it.
-8. **Flat terrain is easy.** 3–10 blocks on flat ground works with 1–6 corrections and sub-block error.
-9. **Hilly terrain is HARD.** 20+ blocks across varied terrain may require 30+ corrections and still fail. Consider fly mode for long-distance travel.
-10. **Tolerance of 1.0 block** is practical for most tasks. 0.5 is achievable on flat terrain.
-
-### Duration-to-Distance Table
-
-Based on measured speed of ~1.16 blocks/sec:
-
-| Duration (ms) | Expected Distance (blocks) |
-|---------------|---------------------------|
-| 250 | ~0.29 |
-| 500 | ~0.58 |
-| 1000 | ~1.16 |
-| 1500 | ~1.74 |
-| 2000 | ~2.32 |
-| 3000 | ~3.49 |
-
----
-
-## 3. Common Pitfalls
-
-### Overshoot
-- **Aiming:** Not a problem. action_look is exact.
-- **Movement:** Overshoot happens with long durations. Use short bursts (≤ 1000ms) and correct between each.
-
-### Collision / Getting Stuck
-- **Symptoms:** `moved < 0.3` after walk command. Position doesn't change.
-- **Causes:** Terrain elevation change, trees, block edges, water.
-- **Fix:** Jump + forward, then strafe if still stuck. Consider flying over obstacles.
-- **Prevention:** Use shorter walk durations so you detect collision earlier.
-
-### Yaw Accumulation
-- The game does NOT normalize yaw. You'll see values like 540°, 720°, -450°.
-- Your code MUST normalize deltas to -180..180 before sending action_look.
-- The `normalize_angle` helper handles this.
-
-### Sprint Toggle Bug
-- `action_sprint toggle=true` is a TOGGLE, not a SET.
-- Calling it every step will alternate sprint on/off/on/off.
-- Set sprint ONCE at the start of navigation, don't touch it during.
-
-### Oscillating Path
-- On hilly terrain, the player may walk AWAY from the target due to deflection by slopes.
-- The remaining distance oscillates (increases/decreases) instead of monotonically decreasing.
-- **Detection:** If remaining increases 3 steps in a row, you're oscillating.
-- **Fix:** Try a completely different approach angle (strafe to a new position, then approach from there).
-
-### Collision with Placed Blocks
-- After building, the player may be surrounded by blocks they placed.
-- Always leave a clear exit path when building.
-- Jump on top of structures to get clear line-of-sight.
-
----
-
-## 4. Fly Mode (Recommended for Long Distance)
-
-For travel > 10 blocks over terrain, **fly mode is strongly recommended**:
-- Eliminates all terrain collision issues
-- Eliminates stuck conditions
-- Makes navigation purely about direction + duration
-- Currently no `action_fly_toggle` in the API — must be toggled via game controls
-
-If available, fly mode reduces navigation to:
-1. Face target (perfect, single-shot)
-2. Move forward for `distance / speed` seconds
-3. Done — no stuck detection, no jumping needed
-
----
-
-## 5. Coordinate System Reference
-
-```
-          -Z (North)
-           ↑
-           |
--X (West) ←──→ +X (East)
-           |
-           ↓
-          +Z (South)
-
-+Y = Up
--Y = Down
-
-Yaw conventions (atan2):
-  East (+X)  → yaw = 0°
-  North (-Z) → yaw = -90°
-  West (-X)  → yaw = ±180°
-  South (+Z) → yaw = 90°
-
-Player eye height: ~1.62 blocks above feet
-Ground block Y: floor(player_y - 1.62)
-Block center: (block_x + 0.5, block_y + 0.5, block_z + 0.5)
-Block top face: (block_x + 0.5, block_y + 1.0, block_z + 0.5)
+    # Look straight down
+    await self.send_action({"type": "action_look", 
+                           "yaw": 0, 
+                           "pitch": -89.0 - self.pose['pitch']})
+    await self.wait_ticks(1)
+    
+    # Place block
+    await self.send_action({"type": "action_use"})
+    await self.wait_ticks(6)     # land on placed block
 ```
 
 ---
 
-## 6. Quick Reference
+## 5. Raycast (Crosshair Target)
 
-### Aiming Checklist
-- [x] Calculate delta yaw/pitch with atan2
-- [x] Normalize yaw delta to -180..180
-- [x] Clamp pitch to ±89°
-- [x] Send single action_look
-- [x] Wait 2 ticks for settle
-- [x] Read raycast for verification
-- [x] No correction loop needed (0° error guaranteed)
+### What It Tells You
 
-### Navigation Checklist
-- [x] Face target direction (single action_look)
-- [x] Level pitch to 0°
-- [x] Walk in short bursts (250–1500ms based on distance)
-- [x] Check remaining distance after each burst
-- [x] Detect stuck (moved < 0.3 blocks)
-- [x] Jump when stuck, strafe when very stuck
-- [x] Don't toggle sprint repeatedly
-- [x] Expect 1.0 block tolerance (0.5 on flat terrain)
-- [x] Budget ~1 correction per block of distance on rough terrain
+```json
+{
+  "hit_type": "block",      // "block" | "entity" | "miss"
+  "hit_class": "SOLID",     // CellClass enum
+  "hit_id": "stone",        // Block name (string)
+  "hit_dist": 1,            // Distance bucket (0-5)
+  "hit_normal": "TOP"       // Face: TOP|BOTTOM|NORTH|SOUTH|EAST|WEST
+}
+```
+
+### Distance Buckets
+
+| Bucket | Range |
+|--------|-------|
+| 0 | 0-2m |
+| 1 | 2-5m |
+| 2 | 5-10m |
+| 3 | 10-20m |
+| 4 | 20-50m |
+| 5 | 50+m |
+
+### Max Reach
+
+**8.0 blocks** — you can only place/break blocks within this range.
+
+### Aiming at Block Faces
+
+To place a block on TOP of block at (bx, by, bz):
+1. Aim at `(bx + 0.5, by + 1.0, bz + 0.5)` — center of top face
+2. Check `raycast.hit_normal == "TOP"`
+3. If correct, `action_use` places on top
+
+To place against NORTH face:
+1. Aim at block's north face center
+2. Check `raycast.hit_normal == "NORTH"`
+
+### Face Normal → Placement Offset
+
+When `action_use` is sent, the new block appears at `(hit_pos + normal)`:
+
+| hit_normal | New block offset |
+|------------|-----------------|
+| TOP | (0, +1, 0) — above |
+| BOTTOM | (0, -1, 0) — below |
+| NORTH | (0, 0, -1) |
+| SOUTH | (0, 0, +1) |
+| EAST | (+1, 0, 0) |
+| WEST | (-1, 0, 0) |
+
+---
+
+## 6. Common Patterns
+
+### Place Block at Ground Level
+
+```python
+async def place_on_ground(self, bx, bz, ground_y):
+    """Place block on top of ground at (bx, ground_y, bz)."""
+    tx, ty, tz = bx + 0.5, ground_y + 1.0, bz + 0.5
+    await self.look_at(tx, ty, tz)
+    
+    if self.raycast.get('hit_type') == 'block' and self.raycast.get('hit_normal') == 'TOP':
+        await self.send_action({"type": "action_use"})
+        await self.wait_ticks(2)
+        return True
+    return False
+```
+
+### Select Block Type
+
+```python
+HOTBAR = {0: "stone", 1: "cobblestone", 2: "dirt", 3: "grass", 
+          4: "sand", 5: "log", 6: "leaves", 7: "gravel", 8: "water"}
+
+async def select_block(self, block_name):
+    slot = {v: k for k, v in HOTBAR.items()}.get(block_name)
+    if slot is not None:
+        await self.send_action({"type": "action_hotbar_select", "slot": slot})
+        await self.wait_ticks(1)
+```
+
+### Break Block at Crosshair
+
+```python
+async def break_target(self):
+    """Break whatever block the crosshair is on."""
+    if self.raycast.get('hit_type') == 'block':
+        await self.send_action({"type": "action_attack"})
+        await self.wait_ticks(2)
+        return True
+    return False
+```
+
+---
+
+## 7. Timing Reference
+
+| Action | Settle Time | Notes |
+|--------|-------------|-------|
+| action_look | 2 ticks (100ms) | Applied instantly, wait for state update |
+| action_move | duration + 5 ticks | No coast, wait for state to reflect |
+| action_jump | 12 ticks (600ms) | Full arc until on_ground=true |
+| action_use | 2 ticks (100ms) | Block placement, no confirmation |
+| action_attack | 2 ticks (100ms) | Block break (instant) |
+| action_hotbar_select | 1 tick (50ms) | Immediate |
+
+### Tick Rate
+
+- **State broadcast:** ~20Hz (every 50ms)
+- **Game physics:** Runs at game FPS (may be higher than 20Hz)
+- **WebSocket latency:** < 1ms (localhost)
+
+---
+
+## 8. Known Issues & Gotchas
+
+1. **Sprint barely works for agents** — 3.4 b/s vs 3.3 b/s walk. Don't rely on it.
+2. **Yaw accumulates** — Can reach 1000+ degrees. Always use delta normalization.
+3. **No placement confirmation** — action_use is fire-and-forget. Verify by looking at the placed position and checking raycast.hit_id.
+4. **Terrain collision redirects** — Moving toward a wall slides you along it. Always re-check position.
+5. **Distance bucket is coarse** — Only 6 buckets, not exact distance. Use block ID for verification.
+6. **SimScreen can't identify block types** — Only SOLID/WATER/FOLIAGE classes. Use raycast.hit_id for specific blocks.
+7. **action_move direction uses current camera facing** — Always look first, then move.
+
+---
+
+## 9. Recommended Agent Architecture
+
+```
+loop:
+    1. Observe: read pose + raycast + ui_state
+    2. Decide: what to do next (look, move, interact)
+    3. Act: send ONE action
+    4. Wait: recv_state for 2-3 ticks
+    5. Verify: check if action had expected effect
+    6. Repeat
+```
+
+**Don't batch multiple actions** without waiting between them. The queue is FIFO but actions interact (e.g., look changes move direction).
+
+**Prefer short, frequent corrections** over long blind moves. A series of 300ms moves with position checks between them is more reliable than one 3000ms move.
+
+---
+
+## Appendix: Test Scripts
+
+- `nav_test.py` — Navigation tests (speed, stopping, waypoints)
+- `aim_test.py` — Aiming tests (look precision, raycast accuracy)
+- `diag_move.py` — Minimal movement diagnostic
+- `test_agent_client.py` — Basic API connectivity test
+- `house_builder.py` — Full building agent (reference implementation)

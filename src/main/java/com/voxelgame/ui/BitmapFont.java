@@ -195,6 +195,25 @@ public class BitmapFont {
         fontShader.unbind();
     }
 
+    /**
+     * Convenience wrapper: draw a string at (x,y) from bottom-left origin.
+     * Uses default scale of 2.0 and white color.
+     */
+    public void drawString(String text, float x, float y, int screenW, int screenH,
+                           float r, float g, float b) {
+        // Convert from bottom-left to top-left origin for drawText
+        float topY = screenH - y - 8 * 2.0f; // char height * scale
+        drawText(text, x, topY, 2.0f, screenW, screenH, r, g, b, 1.0f);
+    }
+
+    /**
+     * Convenience wrapper: renderString at (x,y) from bottom-left origin.
+     */
+    public void renderString(String text, float x, float y, int screenW, int screenH,
+                             float r, float g, float b) {
+        drawString(text, x, y, screenW, screenH, r, g, b);
+    }
+
     public void cleanup() {
         if (textureId != 0) glDeleteTextures(textureId);
         if (vbo != 0) glDeleteBuffers(vbo);

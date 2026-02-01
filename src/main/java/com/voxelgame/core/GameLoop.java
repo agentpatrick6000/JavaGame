@@ -7,18 +7,24 @@ import com.voxelgame.platform.Input;
 import com.voxelgame.platform.Window;
 import com.voxelgame.render.BlockHighlight;
 import com.voxelgame.render.GLInit;
+import com.voxelgame.render.ItemEntityRenderer;
 import com.voxelgame.render.Renderer;
 import com.voxelgame.save.SaveManager;
 import com.voxelgame.save.WorldMeta;
+import com.voxelgame.sim.BlockBreakProgress;
 import com.voxelgame.sim.Controller;
 import com.voxelgame.sim.GameMode;
+import com.voxelgame.sim.ItemEntity;
+import com.voxelgame.sim.ItemEntityManager;
 import com.voxelgame.sim.Physics;
 import com.voxelgame.sim.Player;
 import com.voxelgame.ui.BitmapFont;
 import com.voxelgame.ui.DeathScreen;
 import com.voxelgame.ui.DebugOverlay;
 import com.voxelgame.ui.Hud;
+import com.voxelgame.ui.InventoryScreen;
 import com.voxelgame.ui.Screenshot;
+import com.voxelgame.world.Block;
 import com.voxelgame.world.Blocks;
 import com.voxelgame.world.ChunkPos;
 import com.voxelgame.world.Lighting;
@@ -58,6 +64,12 @@ public class GameLoop {
     private DebugOverlay debugOverlay;
     private BlockHighlight blockHighlight;
     private DeathScreen deathScreen;
+    private InventoryScreen inventoryScreen;
+
+    // Survival mechanics
+    private BlockBreakProgress blockBreakProgress;
+    private ItemEntityManager itemEntityManager;
+    private ItemEntityRenderer itemEntityRenderer;
 
     // Current raycast hit (updated each frame)
     private Raycast.HitResult currentHit;
@@ -78,7 +90,7 @@ public class GameLoop {
     // Auto-test mode (for automated screenshot testing)
     private boolean autoTestMode = false;
     private float autoTestTimer = 0;
-    private int autoTestPhase = 0; // 0=wait, 1=ss-hud, 2=wait-death, 3=ss-death, 4=respawn, 5=ss-respawn, 6=done
+    private int autoTestPhase = 0;
 
     /** Enable automation mode (socket server + optional script). */
     public void setAutomationMode(boolean enabled) { this.automationMode = enabled; }
@@ -176,7 +188,6 @@ public class GameLoop {
                 player.getCamera().getPosition().set(
                     (float) spawn.x(), (float) spawn.y(), (float) spawn.z()
                 );
-                // Set spawn point for respawning
                 player.setSpawnPoint((float) spawn.x(), (float) spawn.y(), (float) spawn.z());
                 System.out.println("New world — Spawn point: " + spawn.x() + ", " + spawn.y() + ", " + spawn.z());
             }
@@ -213,6 +224,15 @@ public class GameLoop {
         deathScreen.init();
         blockHighlight = new BlockHighlight();
         blockHighlight.init();
+
+        // Inventory screen
+        inventoryScreen = new InventoryScreen();
+        inventoryScreen.init(bitmapFont);
+        controller.setInventoryScreen(inventoryScreen);
+
+        // Item entity renderer
+        itemEntityRenderer = new ItemEntityRenderer();
+        itemEntityRenderer.init();
 
         // Initial chunk load
         chunkManager.update(player);
@@ -276,20 +296,32 @@ public class GameLoop {
             // ---- Detect death transition (for death screen reset) ----
             if (player.isDead() && !wasDead) {
                 deathScreen.reset();
-                // Unlock cursor so player can see death screen
                 if (Input.isCursorLocked()) {
                     Input.unlockCursor();
                 }
             }
 
-            // Raycast every frame for block highlight (skip when dead)
-            if (!player.isDead()) {
+            // ---- Update item entities ----
+            itemEntityManager.update(dt, world, player, player.getInventory());
+
+            // Raycast every frame for block highlight (skip when dead or inventory open)
+            if (!player.isDead() && !controller.isInventoryOpen()) {
                 currentHit = Raycast.cast(
                     world, player.getCamera().getPosition(), player.getCamera().getFront(), 8.0f
                 );
-                handleBlockInteraction();
+                handleBlockInteraction(dt);
             } else {
                 currentHit = null;
+                controller.resetBreaking();
+                hud.setBreakProgress(0);
+            }
+
+            // ---- Handle inventory mouse clicks ----
+            if (inventoryScreen.isVisible() && Input.isLeftMouseClicked()) {
+                double[] mx = new double[1], my = new double[1];
+                org.lwjgl.glfw.GLFW.glfwGetCursorPos(window.getHandle(), mx, my);
+                inventoryScreen.handleClick(player.getInventory(), mx[0], my[0],
+                    window.getWidth(), window.getHeight());
             }
 
             // Broadcast state to connected agents
@@ -308,7 +340,7 @@ public class GameLoop {
             int w = window.getWidth();
             int h = window.getHeight();
 
-            // Reset GL state for world rendering (prevent leakage from UI passes)
+            // Reset GL state for world rendering
             glEnable(GL_DEPTH_TEST);
             glDepthMask(true);
             glDisable(GL_BLEND);
@@ -318,6 +350,9 @@ public class GameLoop {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             renderer.render(player.getCamera(), w, h);
 
+            // ---- Render item entities ----
+            itemEntityRenderer.render(player.getCamera(), w, h, itemEntityManager.getItems());
+
             // ---- Block highlight ----
             if (currentHit != null) {
                 blockHighlight.render(player.getCamera(), w, h,
@@ -325,7 +360,6 @@ public class GameLoop {
             }
 
             // ---- Render UI overlay (2D) ----
-            // Reset state for UI pass
             glDisable(GL_DEPTH_TEST);
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -333,6 +367,11 @@ public class GameLoop {
 
             hud.render(w, h, player);
             debugOverlay.render(player, world, time.getFps(), w, h, controller.isSprinting());
+
+            // ---- Inventory screen (on top of HUD) ----
+            if (inventoryScreen.isVisible()) {
+                inventoryScreen.render(w, h, player.getInventory());
+            }
 
             // ---- Death screen (on top of everything) ----
             if (player.isDead()) {
@@ -348,48 +387,36 @@ public class GameLoop {
             if (autoTestMode) {
                 autoTestTimer += dt;
                 switch (autoTestPhase) {
-                    case 0: // Wait for initial render + fall
-                        if (autoTestTimer > 3.0f) {
-                            autoTestPhase = 1;
-                            autoTestTimer = 0;
-                        }
+                    case 0:
+                        if (autoTestTimer > 3.0f) { autoTestPhase = 1; autoTestTimer = 0; }
                         break;
-                    case 1: // Take screenshot (might be death or health bar)
+                    case 1:
                         Screenshot.capture(w, h);
-                        autoTestPhase = 2;
-                        autoTestTimer = 0;
+                        autoTestPhase = 2; autoTestTimer = 0;
                         break;
-                    case 2: // Wait a bit then check if dead
+                    case 2:
                         if (autoTestTimer > 1.0f) {
-                            if (player.isDead()) {
-                                autoTestPhase = 3;
-                            } else {
-                                autoTestPhase = 5; // Skip to respawn ss if alive
-                            }
+                            autoTestPhase = player.isDead() ? 3 : 5;
                             autoTestTimer = 0;
                         }
                         break;
-                    case 3: // Take death screen screenshot
+                    case 3:
                         Screenshot.capture(w, h);
-                        autoTestPhase = 4;
-                        autoTestTimer = 0;
+                        autoTestPhase = 4; autoTestTimer = 0;
                         break;
-                    case 4: // Auto-respawn after delay
+                    case 4:
                         if (autoTestTimer > 2.0f) {
-                            player.respawn();
-                            deathScreen.reset();
-                            autoTestPhase = 5;
-                            autoTestTimer = 0;
+                            player.respawn(); deathScreen.reset();
+                            autoTestPhase = 5; autoTestTimer = 0;
                         }
                         break;
-                    case 5: // Wait for respawn render
+                    case 5:
                         if (autoTestTimer > 3.0f) {
                             Screenshot.capture(w, h);
-                            autoTestPhase = 6;
-                            autoTestTimer = 0;
+                            autoTestPhase = 6; autoTestTimer = 0;
                         }
                         break;
-                    case 6: // Done — exit
+                    case 6:
                         if (autoTestTimer > 1.0f) {
                             System.out.println("[AutoTest] Test complete, exiting.");
                             window.requestClose();
@@ -404,61 +431,121 @@ public class GameLoop {
         }
     }
 
-    private void handleBlockInteraction() {
-        // Check for agent attack/use actions (always valid, not gated by cursor lock)
+    private void handleBlockInteraction(float dt) {
         boolean agentAttack = controller.consumeAgentAttack();
         boolean agentUse = controller.consumeAgentUse();
 
-        boolean leftClick = agentAttack || (Input.isCursorLocked() && Input.isLeftMouseClicked());
-        boolean rightClick = agentUse || (Input.isCursorLocked() && Input.isRightMouseClicked());
+        boolean isCreative = player.getGameMode() == GameMode.CREATIVE;
 
-        if (leftClick && currentHit != null) {
-            // Capture block info before destroying it
-            int brokenBlockId = world.getBlock(currentHit.x(), currentHit.y(), currentHit.z());
-            String brokenBlockName = Blocks.get(brokenBlockId).name();
+        // ---- Block Breaking (Left Click) ----
+        boolean leftClickHeld = agentAttack || (Input.isCursorLocked() && Input.isLeftMouseDown());
+        boolean leftClickPressed = agentAttack || (Input.isCursorLocked() && Input.isLeftMouseClicked());
 
-            world.setBlock(currentHit.x(), currentHit.y(), currentHit.z(), 0); // AIR
-            Set<ChunkPos> affected = Lighting.onBlockRemoved(world, currentHit.x(), currentHit.y(), currentHit.z());
-            chunkManager.rebuildMeshAt(currentHit.x(), currentHit.y(), currentHit.z());
-            chunkManager.rebuildChunks(affected);
+        if (currentHit != null && (isCreative ? leftClickPressed : leftClickHeld)) {
+            int bx = currentHit.x();
+            int by = currentHit.y();
+            int bz = currentHit.z();
+            int blockId = world.getBlock(bx, by, bz);
+            Block block = Blocks.get(blockId);
 
-            // Report result for agent-triggered attacks
+            if (block.isBreakable()) {
+                if (isCreative) {
+                    // Creative: instant break, no drops
+                    breakBlock(bx, by, bz, blockId, false);
+                    controller.resetBreaking();
+                    hud.setBreakProgress(0);
+
+                    if (agentAttack && agentActionQueue != null) {
+                        agentActionQueue.setLastResult(new ActionQueue.ActionResult(
+                            "action_attack", true, block.name(), bx, by, bz));
+                    }
+                } else {
+                    // Survival: time-based breaking via Controller
+                    float breakTime = block.getBreakTime();
+                    float progress = controller.updateBreaking(bx, by, bz, breakTime, dt);
+                    hud.setBreakProgress(progress);
+
+                    if (progress >= 1.0f) {
+                        breakBlock(bx, by, bz, blockId, true);
+                        controller.resetBreaking();
+                        hud.setBreakProgress(0);
+
+                        if (agentAttack && agentActionQueue != null) {
+                            agentActionQueue.setLastResult(new ActionQueue.ActionResult(
+                                "action_attack", true, block.name(), bx, by, bz));
+                        }
+                    }
+                }
+            }
+        } else {
+            // Not holding attack or no target — reset breaking
+            if (controller.isBreaking()) {
+                controller.resetBreaking();
+                hud.setBreakProgress(0);
+            }
+
             if (agentAttack && agentActionQueue != null) {
                 agentActionQueue.setLastResult(new ActionQueue.ActionResult(
-                    "action_attack", true, brokenBlockName,
-                    currentHit.x(), currentHit.y(), currentHit.z()));
+                    "action_attack", false, null, 0, 0, 0));
             }
-        } else if (agentAttack && agentActionQueue != null) {
-            // Agent attacked but missed (no block in crosshair)
-            agentActionQueue.setLastResult(new ActionQueue.ActionResult(
-                "action_attack", false, null, 0, 0, 0));
         }
+
+        // ---- Block Placing (Right Click) ----
+        boolean rightClick = agentUse || (Input.isCursorLocked() && Input.isRightMouseClicked());
 
         if (rightClick && currentHit != null) {
             int px = currentHit.x() + currentHit.nx();
             int py = currentHit.y() + currentHit.ny();
             int pz = currentHit.z() + currentHit.nz();
             int placedBlockId = player.getSelectedBlock();
-            world.setBlock(px, py, pz, placedBlockId);
-            Set<ChunkPos> affected = Lighting.onBlockPlaced(world, px, py, pz);
-            chunkManager.rebuildMeshAt(px, py, pz);
-            chunkManager.rebuildChunks(affected);
 
-            // Report result for agent-triggered use actions
-            if (agentUse && agentActionQueue != null) {
-                agentActionQueue.setLastResult(new ActionQueue.ActionResult(
-                    "action_use", true, Blocks.get(placedBlockId).name(), px, py, pz));
+            if (placedBlockId > 0) {
+                boolean canPlace;
+
+                if (isCreative) {
+                    canPlace = true;
+                } else {
+                    canPlace = player.consumeSelectedBlock();
+                }
+
+                if (canPlace) {
+                    world.setBlock(px, py, pz, placedBlockId);
+                    Set<ChunkPos> affected = Lighting.onBlockPlaced(world, px, py, pz);
+                    chunkManager.rebuildMeshAt(px, py, pz);
+                    chunkManager.rebuildChunks(affected);
+
+                    if (agentUse && agentActionQueue != null) {
+                        agentActionQueue.setLastResult(new ActionQueue.ActionResult(
+                            "action_use", true, Blocks.get(placedBlockId).name(), px, py, pz));
+                    }
+                }
             }
         } else if (agentUse && agentActionQueue != null) {
-            // Agent used but missed (no block surface to place on)
             agentActionQueue.setLastResult(new ActionQueue.ActionResult(
                 "action_use", false, null, 0, 0, 0));
         }
     }
 
     /**
-     * Auto-save: save modified chunks and player position.
+     * Break a block: remove from world, update lighting, optionally spawn drops.
      */
+    private void breakBlock(int bx, int by, int bz, int blockId, boolean spawnDrops) {
+        Block block = Blocks.get(blockId);
+
+        world.setBlock(bx, by, bz, 0); // AIR
+        Set<ChunkPos> affected = Lighting.onBlockRemoved(world, bx, by, bz);
+        chunkManager.rebuildMeshAt(bx, by, bz);
+        chunkManager.rebuildChunks(affected);
+
+        // Spawn item drop in survival mode
+        if (spawnDrops) {
+            int dropId = block.getDrop();
+            if (dropId > 0) {
+                itemEntityManager.spawnDrop(dropId, 1, bx, by, bz);
+            }
+        }
+    }
+
     private void performAutoSave() {
         try {
             int saved = saveManager.saveModifiedChunks(world);
@@ -471,9 +558,6 @@ public class GameLoop {
         }
     }
 
-    /**
-     * Save the current player position, rotation, game mode, and health to world metadata.
-     */
     private void savePlayerMeta() {
         try {
             WorldMeta meta = saveManager.loadMeta();
@@ -497,17 +581,9 @@ public class GameLoop {
     }
 
     private void cleanup() {
-        // Stop agent server
-        if (agentServer != null) {
-            agentServer.shutdown();
-        }
+        if (agentServer != null) agentServer.shutdown();
+        if (automationController != null) automationController.stop();
 
-        // Stop automation
-        if (automationController != null) {
-            automationController.stop();
-        }
-
-        // Save everything on exit
         System.out.println("Saving world on exit...");
         try {
             int saved = saveManager.saveAllChunks(world);
@@ -521,6 +597,8 @@ public class GameLoop {
         chunkManager.shutdown();
         if (blockHighlight != null) blockHighlight.cleanup();
         if (deathScreen != null) deathScreen.cleanup();
+        if (inventoryScreen != null) inventoryScreen.cleanup();
+        if (itemEntityRenderer != null) itemEntityRenderer.cleanup();
         if (bitmapFont != null) bitmapFont.cleanup();
         if (hud != null) hud.cleanup();
         renderer.cleanup();

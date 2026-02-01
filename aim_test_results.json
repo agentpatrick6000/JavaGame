@@ -1,0 +1,438 @@
+[
+  {
+    "test": "rotation_speed",
+    "results": [
+      {
+        "delta_yaw": 10,
+        "change_1tick": 10.0,
+        "change_settled": 10.0,
+        "applied_instantly": true
+      },
+      {
+        "delta_yaw": 45,
+        "change_1tick": 45.0,
+        "change_settled": 45.0,
+        "applied_instantly": true
+      },
+      {
+        "delta_yaw": 90,
+        "change_1tick": 90.0,
+        "change_settled": 90.0,
+        "applied_instantly": true
+      },
+      {
+        "delta_yaw": 135,
+        "change_1tick": 135.0,
+        "change_settled": 135.0,
+        "applied_instantly": true
+      },
+      {
+        "delta_yaw": 180,
+        "change_1tick": 180.0,
+        "change_settled": 180.0,
+        "applied_instantly": true
+      },
+      {
+        "delta_yaw": 270,
+        "change_1tick": 270.0,
+        "change_settled": 270.0,
+        "applied_instantly": true
+      },
+      {
+        "delta_yaw": 360,
+        "change_1tick": 360.0,
+        "change_settled": 360.0,
+        "applied_instantly": true
+      },
+      {
+        "delta_pitch": -89,
+        "actual_pitch": -89,
+        "error": 0
+      },
+      {
+        "delta_pitch": -45,
+        "actual_pitch": -45,
+        "error": 0
+      },
+      {
+        "delta_pitch": 0,
+        "actual_pitch": 0,
+        "error": 0
+      },
+      {
+        "delta_pitch": 45,
+        "actual_pitch": 45,
+        "error": 0
+      },
+      {
+        "delta_pitch": 89,
+        "actual_pitch": 89,
+        "error": 0
+      }
+    ]
+  },
+  {
+    "test": "single_shot_lookat",
+    "results": [
+      {
+        "label": "1 block east",
+        "target_block": [
+          598,
+          65,
+          -77
+        ],
+        "target_dist": 2.39,
+        "hit_type": "block",
+        "hit_id": "sand",
+        "hit_normal": "TOP",
+        "sent_delta": [
+          43.917,
+          -131.629
+        ],
+        "residual_error": 0.017,
+        "success": true
+      },
+      {
+        "label": "3 blocks east",
+        "target_block": [
+          600,
+          65,
+          -77
+        ],
+        "target_dist": 3.84,
+        "hit_type": "block",
+        "hit_id": "grass",
+        "hit_normal": "WEST",
+        "sent_delta": [
+          -23.44,
+          17.726
+        ],
+        "residual_error": 0.014,
+        "success": false
+      },
+      {
+        "label": "5 blocks east",
+        "target_block": [
+          602,
+          65,
+          -77
+        ],
+        "target_dist": 5.64,
+        "hit_type": "block",
+        "hit_id": "grass",
+        "hit_normal": "TOP",
+        "sent_delta": [
+          -7.436,
+          8.232
+        ],
+        "residual_error": 0.001,
+        "success": true
+      },
+      {
+        "label": "diagonal 2,2",
+        "target_block": [
+          599,
+          65,
+          -75
+        ],
+        "target_dist": 4.26,
+        "hit_type": "block",
+        "hit_id": "grass",
+        "hit_normal": "WEST",
+        "sent_delta": [
+          41.811,
+          -5.679
+        ],
+        "residual_error": 0.0,
+        "success": false
+      },
+      {
+        "label": "3 blocks south",
+        "target_block": [
+          597,
+          65,
+          -74
+        ],
+        "target_dist": 4.53,
+        "hit_type": "block",
+        "hit_id": "sand",
+        "hit_normal": "TOP",
+        "sent_delta": [
+          31.527,
+          1.398
+        ],
+        "residual_error": 0.012,
+        "success": true
+      },
+      {
+        "label": "2 blocks west",
+        "target_block": [
+          595,
+          65,
+          -77
+        ],
+        "target_dist": 2.67,
+        "hit_type": "block",
+        "hit_id": "sand",
+        "hit_normal": "TOP",
+        "sent_delta": [
+          58.476,
+          -16.426
+        ],
+        "residual_error": 0.017,
+        "success": true
+      },
+      {
+        "label": "3 blocks north",
+        "target_block": [
+          597,
+          65,
+          -80
+        ],
+        "target_dist": 2.42,
+        "hit_type": "block",
+        "hit_id": "sand",
+        "hit_normal": "TOP",
+        "sent_delta": [
+          133.676,
+          -4.594
+        ],
+        "residual_error": 0.018,
+        "success": true
+      },
+      {
+        "label": "diagonal 5,5",
+        "target_block": [
+          602,
+          65,
+          -72
+        ],
+        "target_dist": 8.31,
+        "hit_type": "block",
+        "hit_id": "grass",
+        "hit_normal": "TOP",
+        "sent_delta": [
+          131.212,
+          30.736
+        ],
+        "residual_error": 0.007,
+        "success": true
+      }
+    ]
+  },
+  {
+    "test": "correction_convergence",
+    "results": [
+      {
+        "label": "3bl east ground",
+        "converged": true,
+        "iterations": 1,
+        "final_residual": 0.016,
+        "final_hit": "grass",
+        "iteration_details": [
+          {
+            "attempt": 0,
+            "residual_before": 31.6856,
+            "delta_sent": [
+              -24.523,
+              -20.065
+            ],
+            "residual_after": 0.016,
+            "converged": true,
+            "hit_type": "block",
+            "hit_id": "grass",
+            "hit_normal": "TOP"
+          }
+        ]
+      },
+      {
+        "label": "diagonal 7bl",
+        "converged": true,
+        "iterations": 1,
+        "final_residual": 0.0004,
+        "final_hit": "none",
+        "iteration_details": [
+          {
+            "attempt": 0,
+            "residual_before": 15.1135,
+            "delta_sent": [
+              4.743,
+              -14.35
+            ],
+            "residual_after": 0.0004,
+            "converged": true,
+            "hit_type": "miss",
+            "hit_id": "none",
+            "hit_normal": "NONE"
+          }
+        ]
+      },
+      {
+        "label": "1bl east, 2 above",
+        "converged": true,
+        "iterations": 1,
+        "final_residual": 0.0008,
+        "final_hit": "leaves",
+        "iteration_details": [
+          {
+            "attempt": 0,
+            "residual_before": 28.1381,
+            "delta_sent": [
+              -1.083,
+              28.117
+            ],
+            "residual_after": 0.0008,
+            "converged": true,
+            "hit_type": "block",
+            "hit_id": "leaves",
+            "hit_normal": "BOTTOM"
+          }
+        ]
+      },
+      {
+        "label": "7bl south ground",
+        "converged": true,
+        "iterations": 1,
+        "final_residual": 0.0062,
+        "final_hit": "none",
+        "iteration_details": [
+          {
+            "attempt": 0,
+            "residual_before": 45.4493,
+            "delta_sent": [
+              43.14,
+              -14.304
+            ],
+            "residual_after": 0.0062,
+            "converged": true,
+            "hit_type": "miss",
+            "hit_id": "none",
+            "hit_normal": "NONE"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "test": "raycast_ranges",
+    "results": [
+      {
+        "direction": "straight down (-89\u00b0)",
+        "hit_type": "block",
+        "hit_id": "sand",
+        "hit_normal": "TOP",
+        "hit_dist": 1
+      },
+      {
+        "direction": "yaw=0 pitch=-10",
+        "hit_type": "block",
+        "hit_id": "grass",
+        "hit_normal": "TOP",
+        "hit_dist": 1
+      },
+      {
+        "direction": "yaw=45 pitch=-10",
+        "hit_type": "block",
+        "hit_id": "grass",
+        "hit_normal": "TOP",
+        "hit_dist": 1
+      },
+      {
+        "direction": "yaw=90 pitch=-10",
+        "hit_type": "miss",
+        "hit_id": "none",
+        "hit_normal": "NONE",
+        "hit_dist": 5
+      },
+      {
+        "direction": "yaw=135 pitch=-10",
+        "hit_type": "miss",
+        "hit_id": "none",
+        "hit_normal": "NONE",
+        "hit_dist": 5
+      },
+      {
+        "direction": "yaw=180 pitch=-10",
+        "hit_type": "miss",
+        "hit_id": "none",
+        "hit_normal": "NONE",
+        "hit_dist": 5
+      },
+      {
+        "direction": "straight up (89\u00b0)",
+        "hit_type": "miss",
+        "hit_id": "none"
+      }
+    ]
+  },
+  {
+    "test": "lookat_precise_benchmark",
+    "results": [
+      {
+        "label": "near ground",
+        "target": [
+          599,
+          67.0,
+          -77
+        ],
+        "converged": true,
+        "attempts": 2,
+        "elapsed_ms": 100,
+        "final_hit": "grass",
+        "final_normal": "TOP"
+      },
+      {
+        "label": "mid diagonal",
+        "target": [
+          602,
+          67.0,
+          -74
+        ],
+        "converged": true,
+        "attempts": 2,
+        "elapsed_ms": 100,
+        "final_hit": "grass",
+        "final_normal": "TOP"
+      },
+      {
+        "label": "far diagonal",
+        "target": [
+          604,
+          67.0,
+          -70
+        ],
+        "converged": true,
+        "attempts": 2,
+        "elapsed_ms": 101,
+        "final_hit": "none",
+        "final_normal": "NONE"
+      },
+      {
+        "label": "1bl south",
+        "target": [
+          597,
+          67.0,
+          -76
+        ],
+        "converged": true,
+        "attempts": 2,
+        "elapsed_ms": 101,
+        "final_hit": "sand",
+        "final_normal": "TOP"
+      },
+      {
+        "label": "behind diagonal",
+        "target": [
+          594,
+          67.0,
+          -80
+        ],
+        "converged": true,
+        "attempts": 2,
+        "elapsed_ms": 102,
+        "final_hit": "none",
+        "final_normal": "NONE"
+      }
+    ]
+  }
+]

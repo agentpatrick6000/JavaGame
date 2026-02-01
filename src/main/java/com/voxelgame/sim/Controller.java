@@ -3,13 +3,15 @@ package com.voxelgame.sim;
 import com.voxelgame.agent.ActionQueue;
 import com.voxelgame.platform.Input;
 import com.voxelgame.render.Camera;
+import com.voxelgame.ui.InventoryScreen;
 import org.joml.Vector3f;
 
 import static org.lwjgl.glfw.GLFW.*;
 
 /**
  * Translates input events into player actions: movement, jumping,
- * camera rotation, sprinting, fly mode toggle.
+ * camera rotation, sprinting, fly mode toggle, inventory management,
+ * and block-breaking progress tracking.
  *
  * In fly mode:  direct position manipulation (free-cam).
  * In walk mode:  sets target velocity; applies acceleration/friction;
@@ -20,6 +22,11 @@ import static org.lwjgl.glfw.GLFW.*;
  * - Smooth acceleration/deceleration via friction
  * - Reduced air control when airborne
  * - Auto step-up for ≤0.5 block ledges
+ *
+ * Block breaking:
+ * - Creative mode: instant break on click
+ * - Survival mode: hold left-click, progress builds over time based on block hardness
+ * - Progress resets if you look away or release mouse
  *
  * Agent interface: When an ActionQueue is set, agent actions are drained
  * each tick and applied with the same priority as keyboard input.
@@ -65,6 +72,14 @@ public class Controller {
     private boolean agentAttackPending = false;
     private boolean agentUsePending = false;
 
+    // ---- Block breaking state ----
+    private float breakProgress = 0;      // 0..1
+    private int breakingBlockX, breakingBlockY, breakingBlockZ; // currently breaking
+    private boolean isBreaking = false;
+
+    // ---- Inventory screen ----
+    private InventoryScreen inventoryScreen = null;
+
     public Controller(Player player) {
         this.player = player;
     }
@@ -72,6 +87,11 @@ public class Controller {
     /** Set the agent action queue. Null to disable. */
     public void setAgentActionQueue(ActionQueue queue) {
         this.agentActionQueue = queue;
+    }
+
+    /** Set the inventory screen reference (for E key toggle). */
+    public void setInventoryScreen(InventoryScreen screen) {
+        this.inventoryScreen = screen;
     }
 
     public void update(float dt) {
@@ -90,6 +110,71 @@ public class Controller {
         handleMovement(dt);
         handleModeToggles();
         handleHotbar();
+        handleInventoryToggle();
+    }
+
+    // ---- Block breaking ----
+
+    /**
+     * Start or continue breaking a block at the given position.
+     * Returns the new break progress (0..1). When it reaches 1.0, the block is broken.
+     *
+     * @param bx, by, bz block coordinates
+     * @param breakTime total time to break this block (seconds)
+     * @param dt delta time this frame
+     * @return current break progress (0..1)
+     */
+    public float updateBreaking(int bx, int by, int bz, float breakTime, float dt) {
+        if (bx != breakingBlockX || by != breakingBlockY || bz != breakingBlockZ) {
+            // Changed target — reset progress
+            breakProgress = 0;
+            breakingBlockX = bx;
+            breakingBlockY = by;
+            breakingBlockZ = bz;
+        }
+
+        isBreaking = true;
+        if (breakTime <= 0) {
+            breakProgress = 1.0f; // instant break
+        } else {
+            breakProgress += dt / breakTime;
+        }
+
+        return Math.min(breakProgress, 1.0f);
+    }
+
+    /**
+     * Reset breaking state (when player stops holding attack or looks away).
+     */
+    public void resetBreaking() {
+        breakProgress = 0;
+        isBreaking = false;
+    }
+
+    /** Get current break progress (0..1). */
+    public float getBreakProgress() { return breakProgress; }
+
+    /** Whether the player is currently breaking a block. */
+    public boolean isBreaking() { return isBreaking; }
+
+    // ---- Inventory toggle ----
+
+    private void handleInventoryToggle() {
+        if (Input.isKeyPressed(GLFW_KEY_E)) {
+            if (inventoryScreen != null) {
+                inventoryScreen.toggle();
+                if (inventoryScreen.isOpen()) {
+                    Input.unlockCursor();
+                } else {
+                    Input.lockCursor();
+                }
+            }
+        }
+    }
+
+    /** Check if inventory screen is open (to suppress game interactions). */
+    public boolean isInventoryOpen() {
+        return inventoryScreen != null && inventoryScreen.isOpen();
     }
 
     // ---- Agent action processing ----
@@ -352,9 +437,13 @@ public class Controller {
             player.setGameMode(next);
         }
 
-        // ESC = toggle cursor lock
+        // ESC = toggle cursor lock / close inventory
         if (Input.isKeyPressed(GLFW_KEY_ESCAPE)) {
-            if (Input.isCursorLocked()) {
+            if (inventoryScreen != null && inventoryScreen.isOpen()) {
+                // Close inventory first
+                inventoryScreen.close();
+                Input.lockCursor();
+            } else if (Input.isCursorLocked()) {
                 Input.unlockCursor();
             } else {
                 Input.lockCursor();

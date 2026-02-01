@@ -6,7 +6,7 @@ import org.joml.Vector3f;
 
 /**
  * Player entity. Holds position (at eye level via Camera), velocity,
- * on-ground state, fly mode, hotbar with block selection,
+ * on-ground state, fly mode, inventory with block selection,
  * health/damage system, and game mode.
  *
  * Position convention: getPosition() returns the eye-level position.
@@ -31,8 +31,9 @@ public class Player {
     private boolean flyMode = false;  // start in walk mode with physics/collision
     private boolean onGround = false;
 
-    /** Hotbar: block IDs for each slot. */
-    private final int[] hotbar = new int[HOTBAR_SIZE];
+    /** Player inventory (9 hotbar + 27 storage). */
+    private final Inventory inventory = new Inventory();
+
     /** Currently selected hotbar slot (0-based). */
     private int selectedSlot = 0;
 
@@ -62,16 +63,21 @@ public class Player {
         initHotbar();
     }
 
+    /**
+     * Initialize the hotbar with default creative-mode block palette.
+     * In survival mode, the inventory starts empty — this gives a starter kit.
+     */
     private void initHotbar() {
-        hotbar[0] = Blocks.STONE.id();
-        hotbar[1] = Blocks.COBBLESTONE.id();
-        hotbar[2] = Blocks.DIRT.id();
-        hotbar[3] = Blocks.GRASS.id();
-        hotbar[4] = Blocks.SAND.id();
-        hotbar[5] = Blocks.LOG.id();
-        hotbar[6] = Blocks.LEAVES.id();
-        hotbar[7] = Blocks.GRAVEL.id();
-        hotbar[8] = Blocks.WATER.id();
+        // Creative mode palette (hotbar shows block types for quick placement)
+        inventory.setSlot(0, new Inventory.ItemStack(Blocks.STONE.id(), 64));
+        inventory.setSlot(1, new Inventory.ItemStack(Blocks.COBBLESTONE.id(), 64));
+        inventory.setSlot(2, new Inventory.ItemStack(Blocks.DIRT.id(), 64));
+        inventory.setSlot(3, new Inventory.ItemStack(Blocks.GRASS.id(), 64));
+        inventory.setSlot(4, new Inventory.ItemStack(Blocks.SAND.id(), 64));
+        inventory.setSlot(5, new Inventory.ItemStack(Blocks.LOG.id(), 64));
+        inventory.setSlot(6, new Inventory.ItemStack(Blocks.LEAVES.id(), 64));
+        inventory.setSlot(7, new Inventory.ItemStack(Blocks.GRAVEL.id(), 64));
+        inventory.setSlot(8, new Inventory.ItemStack(Blocks.WATER.id(), 64));
     }
 
     // --- Camera / Position ---
@@ -84,6 +90,10 @@ public class Player {
     // --- Velocity ---
 
     public Vector3f getVelocity() { return velocity; }
+
+    // --- Inventory ---
+
+    public Inventory getInventory() { return inventory; }
 
     // --- Fly mode ---
 
@@ -122,11 +132,11 @@ public class Player {
         }
     }
 
-    // --- Hotbar / Block selection ---
+    // --- Hotbar / Block selection (uses Inventory) ---
 
     /** Get the block ID in the currently selected hotbar slot. */
     public int getSelectedBlock() {
-        return hotbar[selectedSlot];
+        return inventory.getHotbarBlockId(selectedSlot);
     }
 
     /** Get the currently selected hotbar slot index (0-based). */
@@ -144,20 +154,33 @@ public class Player {
 
     /** Get the block ID at a specific hotbar slot. */
     public int getHotbarBlock(int slot) {
-        if (slot < 0 || slot >= HOTBAR_SIZE) return 0;
-        return hotbar[slot];
+        return inventory.getHotbarBlockId(slot);
     }
 
     /** Set the block ID at a specific hotbar slot. */
     public void setHotbarBlock(int slot, int blockId) {
         if (slot >= 0 && slot < HOTBAR_SIZE) {
-            hotbar[slot] = blockId;
+            inventory.setSlot(slot, new Inventory.ItemStack(blockId, 64));
         }
     }
 
     /** For backward compatibility. */
     public void setSelectedBlock(int block) {
-        hotbar[selectedSlot] = block;
+        inventory.setSlot(selectedSlot, new Inventory.ItemStack(block, 64));
+    }
+
+    /**
+     * Consume one item from the selected hotbar slot (for block placement in survival).
+     * Returns true if an item was consumed, false if slot was empty.
+     */
+    public boolean consumeSelectedBlock() {
+        Inventory.ItemStack stack = inventory.getSlot(selectedSlot);
+        if (stack == null || stack.isEmpty()) return false;
+        stack.remove(1);
+        if (stack.isEmpty()) {
+            inventory.setSlot(selectedSlot, null);
+        }
+        return true;
     }
 
     // ================================================================
