@@ -9,6 +9,7 @@ import static org.lwjgl.opengl.GL33.*;
 /**
  * Procedurally generated block texture atlas.
  * 16x16 pixel tiles arranged in a grid.
+ * Colors matched to InfDev 611 palette.
  */
 public class TextureAtlas {
 
@@ -81,13 +82,11 @@ public class TextureAtlas {
             case 19 -> generatePlanks(pixels, baseX, baseY);
             case 20 -> generateCraftingTableTop(pixels, baseX, baseY);
             case 21 -> generateCraftingTableSide(pixels, baseX, baseY);
-            // Chest textures (22-23) already handled by existing code layout
             case 22 -> generateChestTop(pixels, baseX, baseY);
             case 23 -> generateChestSide(pixels, baseX, baseY);
             case 24 -> generateRail(pixels, baseX, baseY);
             case 25 -> generateTNTTop(pixels, baseX, baseY);
             case 26 -> generateTNTSide(pixels, baseX, baseY);
-            // InfDev 611 textures
             case 27 -> generateFurnaceTop(pixels, baseX, baseY);
             case 28 -> generateFurnaceSide(pixels, baseX, baseY);
             case 29 -> generateFurnaceFront(pixels, baseX, baseY);
@@ -118,120 +117,152 @@ public class TextureAtlas {
         return h ^ (h >> 16);
     }
 
+    /** Clamp integer to [0, 255] */
+    private int clamp(int v) {
+        return Math.max(0, Math.min(255, v));
+    }
+
     private void generateAir(ByteBuffer buf, int bx, int by) {
-        // Transparent
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++)
                 setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
     }
 
+    // InfDev 611 Stone: #7f7f7f (127, 127, 127) — medium gray
     private void generateStone(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
-                int v = 120 + (hash(x, y) & 31) - 16;
-                setPixel(buf, bx + x, by + y, v, v, v, 255);
+                int noise = (hash(x, y) & 31) - 16;
+                int v = 127 + noise;
+                setPixel(buf, bx + x, by + y, clamp(v), clamp(v), clamp(v), 255);
             }
     }
 
+    // InfDev 611 Cobblestone: #8a8a8a (138, 138, 138) — light gray with brick pattern
     private void generateCobblestone(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
-                int v = 100 + (hash(x + 37, y + 13) & 63) - 32;
+                int noise = (hash(x + 37, y + 13) & 63) - 32;
                 boolean dark = ((x / 4 + y / 4) & 1) == 0;
-                if (dark) v -= 20;
-                setPixel(buf, bx + x, by + y, v, v, v, 255);
+                int base = 138 + noise;
+                if (dark) base -= 20;
+                setPixel(buf, bx + x, by + y, clamp(base), clamp(base), clamp(base), 255);
             }
     }
 
+    // InfDev 611 Dirt: #96684f (150, 104, 79) — warm brown
     private void generateDirt(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
                 int noise = (hash(x, y) & 15) - 8;
-                setPixel(buf, bx + x, by + y, 134 + noise, 96 + noise, 67 + noise, 255);
+                setPixel(buf, bx + x, by + y,
+                    clamp(150 + noise), clamp(104 + noise), clamp(79 + noise), 255);
             }
     }
 
+    // InfDev 611 Grass Top: #7cbd6b (124, 189, 107) — bright green
     private void generateGrassTop(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
                 int noise = (hash(x, y) & 15) - 8;
-                setPixel(buf, bx + x, by + y, 76 + noise, 153 + noise, 0, 255);
+                setPixel(buf, bx + x, by + y,
+                    clamp(124 + noise), clamp(189 + noise), clamp(107 + noise), 255);
             }
     }
 
+    // Grass Side: green top strip (#7cbd6b) over dirt (#96684f)
     private void generateGrassSide(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
                 int noise = (hash(x, y) & 7) - 4;
                 if (y < 4) {
                     // Green top strip
-                    setPixel(buf, bx + x, by + y, 76 + noise, 153 + noise, 0, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(124 + noise), clamp(189 + noise), clamp(107 + noise), 255);
                 } else {
                     // Dirt below
-                    setPixel(buf, bx + x, by + y, 134 + noise, 96 + noise, 67 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(150 + noise), clamp(104 + noise), clamp(79 + noise), 255);
                 }
             }
     }
 
+    // InfDev 611 Sand: #dbd3a0 (219, 211, 160) — tan/beige
     private void generateSand(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
                 int noise = (hash(x, y) & 15) - 8;
-                setPixel(buf, bx + x, by + y, 214 + noise, 207 + noise, 152 + noise, 255);
+                setPixel(buf, bx + x, by + y,
+                    clamp(219 + noise), clamp(211 + noise), clamp(160 + noise), 255);
             }
     }
 
+    // InfDev 611 Gravel: #857b7b (133, 123, 123) — brownish gray
     private void generateGravel(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
-                int v = 130 + (hash(x * 3, y * 7) & 31) - 16;
-                if ((hash(x + 5, y + 3) & 7) == 0) v -= 30;
-                setPixel(buf, bx + x, by + y, v, v - 5, v - 5, 255);
+                int v = 133 + (hash(x * 3, y * 7) & 31) - 16;
+                if ((hash(x + 5, y + 3) & 7) == 0) v -= 25;
+                setPixel(buf, bx + x, by + y, clamp(v), clamp(v - 10), clamp(v - 10), 255);
             }
     }
 
+    // InfDev 611 Log End: rings in oak brown (#9f8150 base)
     private void generateLogEnd(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
                 int cx = x - 8, cy = y - 8;
                 double dist = Math.sqrt(cx * cx + cy * cy);
                 int ring = (int)(dist * 1.5) & 1;
-                int base = ring == 0 ? 160 : 130;
+                int base = ring == 0 ? 170 : 140;
                 int noise = (hash(x, y) & 7) - 4;
-                setPixel(buf, bx + x, by + y, base + noise, (int)(base * 0.7) + noise, (int)(base * 0.4) + noise, 255);
+                setPixel(buf, bx + x, by + y,
+                    clamp(base + noise),
+                    clamp((int)(base * 0.65) + noise),
+                    clamp((int)(base * 0.38) + noise), 255);
             }
     }
 
+    // InfDev 611 Log Bark: #9f8150 (159, 129, 80) — oak brown
     private void generateLogBark(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
                 int noise = (hash(x, y) & 15) - 8;
-                int stripe = (y & 3) == 0 ? -15 : 0;
-                setPixel(buf, bx + x, by + y, 100 + noise + stripe, 70 + noise + stripe, 40 + noise + stripe, 255);
+                int stripe = (y & 3) == 0 ? -12 : 0;
+                setPixel(buf, bx + x, by + y,
+                    clamp(159 + noise + stripe),
+                    clamp(129 + noise + stripe),
+                    clamp(80 + noise + stripe), 255);
             }
     }
 
+    // InfDev 611 Leaves: #6ba05c (107, 160, 92) — forest green
     private void generateLeaves(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
                 int noise = (hash(x, y) & 31) - 16;
                 boolean hole = (hash(x + 11, y + 7) & 7) == 0;
                 if (hole) {
-                    setPixel(buf, bx + x, by + y, 30 + noise, 100 + noise, 0, 180);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(70 + noise), clamp(120 + noise), clamp(55 + noise), 180);
                 } else {
-                    setPixel(buf, bx + x, by + y, 50 + noise, 130 + noise, 10 + noise, 230);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(107 + noise), clamp(160 + noise), clamp(92 + noise), 230);
                 }
             }
     }
 
+    // InfDev 611 Water: #3f76e4 (63, 118, 228) — classic blue
     private void generateWater(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
                 int noise = (hash(x, y) & 15) - 8;
-                setPixel(buf, bx + x, by + y, 30 + noise, 80 + noise, 200 + noise, 150);
+                setPixel(buf, bx + x, by + y,
+                    clamp(63 + noise), clamp(118 + noise), clamp(228 + noise), 150);
             }
     }
 
+    // Ore textures use InfDev stone base (#7f7f7f)
     private void generateOre(ByteBuffer buf, int bx, int by, int oreR, int oreG, int oreB) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
@@ -240,8 +271,8 @@ public class TextureAtlas {
                 if (isOreSpot) {
                     setPixel(buf, bx + x, by + y, oreR, oreG, oreB, 255);
                 } else {
-                    int v = 120 + stoneNoise;
-                    setPixel(buf, bx + x, by + y, v, v, v, 255);
+                    int v = 127 + stoneNoise;
+                    setPixel(buf, bx + x, by + y, clamp(v), clamp(v), clamp(v), 255);
                 }
             }
     }
@@ -251,9 +282,7 @@ public class TextureAtlas {
             for (int x = 0; x < TILE_SIZE; x++) {
                 int noise = (hash(x, y) & 15) - 8;
                 setPixel(buf, bx + x, by + y,
-                    Math.max(0, Math.min(255, r + noise)),
-                    Math.max(0, Math.min(255, g + noise)),
-                    Math.max(0, Math.min(255, b + noise)), 255);
+                    clamp(r + noise), clamp(g + noise), clamp(b + noise), 255);
             }
     }
 
@@ -265,6 +294,7 @@ public class TextureAtlas {
             }
     }
 
+    // InfDev 611 Planks: #bc9862 (188, 152, 98) — warm oak planks
     private void generatePlanks(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
@@ -272,9 +302,9 @@ public class TextureAtlas {
                 int stripe = (y % 4 == 0) ? -20 : 0;
                 int grain = ((x + y / 3) & 3) < 1 ? -8 : 0;
                 setPixel(buf, bx + x, by + y,
-                    180 + noise + stripe + grain,
-                    140 + noise + stripe + grain,
-                    76 + noise + stripe + grain, 255);
+                    clamp(188 + noise + stripe + grain),
+                    clamp(152 + noise + stripe + grain),
+                    clamp(98 + noise + stripe + grain), 255);
             }
     }
 
@@ -284,14 +314,15 @@ public class TextureAtlas {
                 int noise = (hash(x, y) & 7) - 4;
                 boolean gridLine = (x == 7 || x == 8 || y == 7 || y == 8);
                 if (gridLine) {
-                    setPixel(buf, bx + x, by + y, 80 + noise, 60 + noise, 35 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(100 + noise), clamp(75 + noise), clamp(45 + noise), 255);
                 } else {
-                    setPixel(buf, bx + x, by + y, 170 + noise, 130 + noise, 70 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(178 + noise), clamp(140 + noise), clamp(85 + noise), 255);
                 }
             }
     }
 
-    // ---- Chest textures ----
     private void generateChestTop(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
@@ -299,11 +330,14 @@ public class TextureAtlas {
                 boolean border = x == 0 || x == 15 || y == 0 || y == 15;
                 boolean latch = (x >= 6 && x <= 9 && y >= 0 && y <= 2);
                 if (latch) {
-                    setPixel(buf, bx + x, by + y, 80 + noise, 70 + noise, 50 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(80 + noise), clamp(70 + noise), clamp(50 + noise), 255);
                 } else if (border) {
-                    setPixel(buf, bx + x, by + y, 100 + noise, 75 + noise, 40 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(100 + noise), clamp(75 + noise), clamp(40 + noise), 255);
                 } else {
-                    setPixel(buf, bx + x, by + y, 160 + noise, 120 + noise, 60 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(165 + noise), clamp(125 + noise), clamp(65 + noise), 255);
                 }
             }
     }
@@ -315,16 +349,18 @@ public class TextureAtlas {
                 boolean border = x == 0 || x == 15 || y == 0 || y == 15;
                 boolean latch = (x >= 6 && x <= 9 && y >= 5 && y <= 9);
                 if (latch) {
-                    setPixel(buf, bx + x, by + y, 80 + noise, 70 + noise, 50 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(80 + noise), clamp(70 + noise), clamp(50 + noise), 255);
                 } else if (border) {
-                    setPixel(buf, bx + x, by + y, 100 + noise, 75 + noise, 40 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(100 + noise), clamp(75 + noise), clamp(40 + noise), 255);
                 } else {
-                    setPixel(buf, bx + x, by + y, 160 + noise, 120 + noise, 60 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(165 + noise), clamp(125 + noise), clamp(65 + noise), 255);
                 }
             }
     }
 
-    // ---- Rail texture ----
     private void generateRail(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
@@ -332,25 +368,28 @@ public class TextureAtlas {
                 boolean rail = (x == 3 || x == 12);
                 boolean tie = (y % 4 < 2) && (x >= 2 && x <= 13);
                 if (rail) {
-                    setPixel(buf, bx + x, by + y, 140 + noise, 130 + noise, 120 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(140 + noise), clamp(130 + noise), clamp(120 + noise), 255);
                 } else if (tie) {
-                    setPixel(buf, bx + x, by + y, 120 + noise, 85 + noise, 50 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(120 + noise), clamp(85 + noise), clamp(50 + noise), 255);
                 } else {
-                    setPixel(buf, bx + x, by + y, 0, 0, 0, 0); // transparent
+                    setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
                 }
             }
     }
 
-    // ---- TNT textures ----
     private void generateTNTTop(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
                 int noise = (hash(x, y) & 7) - 4;
                 boolean fuse = (x >= 6 && x <= 9 && y >= 6 && y <= 9);
                 if (fuse) {
-                    setPixel(buf, bx + x, by + y, 60 + noise, 60 + noise, 60 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(60 + noise), clamp(60 + noise), clamp(60 + noise), 255);
                 } else {
-                    setPixel(buf, bx + x, by + y, 200 + noise, 50 + noise, 30 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(200 + noise), clamp(50 + noise), clamp(30 + noise), 255);
                 }
             }
     }
@@ -361,21 +400,22 @@ public class TextureAtlas {
                 int noise = (hash(x, y) & 7) - 4;
                 boolean stripe = (y >= 4 && y <= 11);
                 if (stripe) {
-                    setPixel(buf, bx + x, by + y, 200 + noise, 50 + noise, 30 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(200 + noise), clamp(50 + noise), clamp(30 + noise), 255);
                 } else {
-                    setPixel(buf, bx + x, by + y, 160 + noise, 140 + noise, 120 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(160 + noise), clamp(140 + noise), clamp(120 + noise), 255);
                 }
             }
     }
 
-    // ---- InfDev 611 textures ----
-
+    // Furnace top uses stone color (#7f7f7f)
     private void generateFurnaceTop(ByteBuffer buf, int bx, int by) {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
                 int noise = (hash(x, y) & 15) - 8;
-                int v = 115 + noise;
-                setPixel(buf, bx + x, by + y, v, v, v, 255);
+                int v = 127 + noise;
+                setPixel(buf, bx + x, by + y, clamp(v), clamp(v), clamp(v), 255);
             }
     }
 
@@ -385,11 +425,11 @@ public class TextureAtlas {
                 int noise = (hash(x, y) & 7) - 4;
                 boolean border = x == 0 || x == 15 || y == 0 || y == 15;
                 if (border) {
-                    int v = 90 + noise;
-                    setPixel(buf, bx + x, by + y, v, v, v, 255);
+                    int v = 100 + noise;
+                    setPixel(buf, bx + x, by + y, clamp(v), clamp(v), clamp(v), 255);
                 } else {
-                    int v = 115 + noise;
-                    setPixel(buf, bx + x, by + y, v, v, v, 255);
+                    int v = 127 + noise;
+                    setPixel(buf, bx + x, by + y, clamp(v), clamp(v), clamp(v), 255);
                 }
             }
     }
@@ -401,13 +441,14 @@ public class TextureAtlas {
                 boolean mouth = (x >= 4 && x <= 11 && y >= 6 && y <= 13);
                 boolean border = x == 0 || x == 15 || y == 0 || y == 15;
                 if (mouth) {
-                    setPixel(buf, bx + x, by + y, 40 + noise, 35 + noise, 30 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(40 + noise), clamp(35 + noise), clamp(30 + noise), 255);
                 } else if (border) {
-                    int v = 90 + noise;
-                    setPixel(buf, bx + x, by + y, v, v, v, 255);
+                    int v = 100 + noise;
+                    setPixel(buf, bx + x, by + y, clamp(v), clamp(v), clamp(v), 255);
                 } else {
-                    int v = 115 + noise;
-                    setPixel(buf, bx + x, by + y, v, v, v, 255);
+                    int v = 127 + noise;
+                    setPixel(buf, bx + x, by + y, clamp(v), clamp(v), clamp(v), 255);
                 }
             }
     }
@@ -422,11 +463,12 @@ public class TextureAtlas {
                 if (flameCenter) {
                     setPixel(buf, bx + x, by + y, 255, 255, 180, 240);
                 } else if (flame && ((x + y) % 2 == 0)) {
-                    setPixel(buf, bx + x, by + y, 255, 180 + noise * 10, 50, 200);
+                    setPixel(buf, bx + x, by + y, 255, clamp(180 + noise * 10), 50, 200);
                 } else if (stick) {
-                    setPixel(buf, bx + x, by + y, 120 + noise, 85 + noise, 50 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(120 + noise), clamp(85 + noise), clamp(50 + noise), 255);
                 } else {
-                    setPixel(buf, bx + x, by + y, 0, 0, 0, 0); // transparent
+                    setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
                 }
             }
     }
@@ -439,7 +481,7 @@ public class TextureAtlas {
                                 !((x == 3 || x == 12) && (y == 3 || y == 12));
                 if (shape) {
                     int v = 35 + noise;
-                    setPixel(buf, bx + x, by + y, v, v, v, 255);
+                    setPixel(buf, bx + x, by + y, clamp(v), clamp(v), clamp(v), 255);
                 } else {
                     setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
                 }
@@ -453,7 +495,8 @@ public class TextureAtlas {
                 boolean shape = (x >= 2 && x <= 13 && y >= 5 && y <= 12);
                 boolean top = (x >= 4 && x <= 11 && y >= 3 && y <= 5);
                 if (shape || top) {
-                    setPixel(buf, bx + x, by + y, 200 + noise, 195 + noise, 190 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(200 + noise), clamp(195 + noise), clamp(190 + noise), 255);
                 } else {
                     setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
                 }
@@ -467,11 +510,14 @@ public class TextureAtlas {
                 boolean frame = (x == 1 || x == 14 || y == 1 || y == 14);
                 int noise = (hash(x, y) & 7) - 4;
                 if (border) {
-                    setPixel(buf, bx + x, by + y, 180 + noise, 200 + noise, 210 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(180 + noise), clamp(200 + noise), clamp(210 + noise), 255);
                 } else if (frame) {
-                    setPixel(buf, bx + x, by + y, 200 + noise, 220 + noise, 230 + noise, 200);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(200 + noise), clamp(220 + noise), clamp(230 + noise), 200);
                 } else {
-                    setPixel(buf, bx + x, by + y, 210 + noise, 230 + noise, 240 + noise, 80);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(210 + noise), clamp(230 + noise), clamp(240 + noise), 80);
                 }
             }
     }
@@ -484,11 +530,12 @@ public class TextureAtlas {
                 boolean petal = Math.sqrt((x - 7.5) * (x - 7.5) + (y - 6) * (y - 6)) < 4.5;
                 boolean center = Math.sqrt((x - 7.5) * (x - 7.5) + (y - 6) * (y - 6)) < 1.5;
                 if (center) {
-                    setPixel(buf, bx + x, by + y, 255, 200 + noise * 10, 50, 255);
+                    setPixel(buf, bx + x, by + y, 255, clamp(200 + noise * 10), 50, 255);
                 } else if (petal) {
-                    setPixel(buf, bx + x, by + y, 220 + noise * 5, 30 + noise * 5, 30, 255);
+                    setPixel(buf, bx + x, by + y, clamp(220 + noise * 5), clamp(30 + noise * 5), 30, 255);
                 } else if (stem) {
-                    setPixel(buf, bx + x, by + y, 40 + noise, 120 + noise, 20 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(40 + noise), clamp(120 + noise), clamp(20 + noise), 255);
                 } else {
                     setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
                 }
@@ -503,11 +550,12 @@ public class TextureAtlas {
                 boolean petal = Math.sqrt((x - 7.5) * (x - 7.5) + (y - 6) * (y - 6)) < 4;
                 boolean center = Math.sqrt((x - 7.5) * (x - 7.5) + (y - 6) * (y - 6)) < 1.5;
                 if (center) {
-                    setPixel(buf, bx + x, by + y, 180 + noise * 5, 120 + noise * 5, 30, 255);
+                    setPixel(buf, bx + x, by + y, clamp(180 + noise * 5), clamp(120 + noise * 5), 30, 255);
                 } else if (petal) {
-                    setPixel(buf, bx + x, by + y, 255, 230 + noise * 5, 50 + noise * 5, 255);
+                    setPixel(buf, bx + x, by + y, 255, clamp(230 + noise * 5), clamp(50 + noise * 5), 255);
                 } else if (stem) {
-                    setPixel(buf, bx + x, by + y, 40 + noise, 120 + noise, 20 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(40 + noise), clamp(120 + noise), clamp(20 + noise), 255);
                 } else {
                     setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
                 }
@@ -518,14 +566,13 @@ public class TextureAtlas {
         for (int y = 0; y < TILE_SIZE; y++)
             for (int x = 0; x < TILE_SIZE; x++) {
                 int noise = (hash(x, y) & 7) - 4;
-                // Diamond shape
                 int cx = Math.abs(x - 7);
                 int cy = Math.abs(y - 7);
                 boolean shape = (cx + cy) <= 6 && cy <= 5;
                 if (shape) {
                     int bright = (cx + cy < 4) ? 20 : 0;
-                    setPixel(buf, bx + x, by + y, 130 + noise + bright, 230 + noise + bright,
-                             255, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(130 + noise + bright), clamp(230 + noise + bright), 255, 255);
                 } else {
                     setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
                 }
@@ -539,7 +586,8 @@ public class TextureAtlas {
                 boolean shape = (x >= 3 && x <= 12 && y >= 3 && y <= 12) &&
                                 !((x == 3 || x == 12) && (y == 3 || y == 12));
                 if (shape) {
-                    setPixel(buf, bx + x, by + y, 55 + noise, 40 + noise, 25 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(55 + noise), clamp(40 + noise), clamp(25 + noise), 255);
                 } else {
                     setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
                 }
@@ -555,9 +603,11 @@ public class TextureAtlas {
                                   (x >= 2 && x <= 6 && y >= 2 && y <= 4) ||
                                   (x >= 9 && x <= 13 && y >= 2 && y <= 4);
                 if (hasTool) {
-                    setPixel(buf, bx + x, by + y, 120 + noise, 90 + noise, 50 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(130 + noise), clamp(100 + noise), clamp(60 + noise), 255);
                 } else {
-                    setPixel(buf, bx + x, by + y, 160 + noise, 120 + noise, 65 + noise, 255);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(168 + noise), clamp(130 + noise), clamp(78 + noise), 255);
                 }
             }
     }

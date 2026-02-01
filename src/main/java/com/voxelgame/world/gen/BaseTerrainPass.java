@@ -6,7 +6,7 @@ import com.voxelgame.world.WorldConstants;
 
 /**
  * First generation pass. Fills the chunk with stone/air based on the
- * heightmap computed from multi-octave elevation noise.
+ * heightmap computed from InfDev 611-style combined noise.
  * Stone below the terrain height, air above.
  */
 public class BaseTerrainPass implements GenPipeline.GenerationPass {
