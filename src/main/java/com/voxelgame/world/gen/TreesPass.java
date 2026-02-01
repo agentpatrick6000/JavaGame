@@ -108,43 +108,18 @@ public class TreesPass implements GenPipeline.GenerationPass {
 
     /**
      * Try to place a tree at the given local position. Returns true if successful.
+     * Scans the actual chunk blocks instead of using height function, since the
+     * 3D density terrain may have overhangs that confuse height lookups.
      */
     private boolean tryPlaceTree(Chunk chunk, GenContext context, RNG rng,
                                   GenConfig config, int chunkWorldX, int chunkWorldZ,
                                   int lx, int lz) {
-        int worldX = chunkWorldX + lx;
-        int worldZ = chunkWorldZ + lz;
-
-        // Find the surface height
-        int height = context.getTerrainHeight(worldX, worldZ);
+        // Find the actual surface by scanning the chunk column
+        int height = findGrassHeight(chunk, lx, lz);
+        if (height < 0) return false;
 
         // Must be at least 3 blocks above sea level (no beach trees)
         if (height <= WorldConstants.SEA_LEVEL + 2) return false;
-
-        // Check that the surface block is grass
-        int surfBlock = chunk.getBlock(lx, height, lz);
-        if (surfBlock != Blocks.GRASS.id()) return false;
-
-        // Check for nearby water/sand (no trees on beach edges)
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz2 = -1; dz2 <= 1; dz2++) {
-                int nh = context.getTerrainHeight(worldX + dx, worldZ + dz2);
-                if (nh <= WorldConstants.SEA_LEVEL + 1) return false;
-            }
-        }
-
-        // Check slope
-        int hN = context.getTerrainHeight(worldX, worldZ - 1);
-        int hS = context.getTerrainHeight(worldX, worldZ + 1);
-        int hE = context.getTerrainHeight(worldX + 1, worldZ);
-        int hW = context.getTerrainHeight(worldX - 1, worldZ);
-
-        int maxSlope = Math.max(
-            Math.max(Math.abs(height - hN), Math.abs(height - hS)),
-            Math.max(Math.abs(height - hE), Math.abs(height - hW))
-        );
-
-        if (maxSlope > config.treeSlopeMax) return false;
 
         // Check that space above is clear (at least trunk height + 2)
         int trunkHeight = config.treeMinTrunk + rng.nextInt(
@@ -205,6 +180,19 @@ public class TreesPass implements GenPipeline.GenerationPass {
                 setLeaf(chunk, lx, y, lz);
             }
         }
+    }
+
+    /**
+     * Find the highest grass block in a column by scanning the actual chunk.
+     * Returns -1 if no grass found.
+     */
+    private int findGrassHeight(Chunk chunk, int lx, int lz) {
+        for (int y = WorldConstants.WORLD_HEIGHT - 1; y >= 0; y--) {
+            if (chunk.getBlock(lx, y, lz) == Blocks.GRASS.id()) {
+                return y;
+            }
+        }
+        return -1;
     }
 
     /** Set a leaf block if within chunk bounds and the position is air. */

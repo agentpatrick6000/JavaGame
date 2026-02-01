@@ -48,16 +48,15 @@ public class FlowersPass implements GenPipeline.GenerationPass {
             lx = Math.max(0, Math.min(WorldConstants.CHUNK_SIZE - 1, lx));
             lz = Math.max(0, Math.min(WorldConstants.CHUNK_SIZE - 1, lz));
 
-            int worldX = chunkWorldX + lx;
-            int worldZ = chunkWorldZ + lz;
-
-            // Find surface height
-            int height = context.getTerrainHeight(worldX, worldZ);
-            if (height <= WorldConstants.SEA_LEVEL) continue;
-
-            // Must be on grass
-            int surfaceBlock = chunk.getBlock(lx, height, lz);
-            if (surfaceBlock != Blocks.GRASS.id()) continue;
+            // Find actual grass by scanning chunk column
+            int height = -1;
+            for (int y = WorldConstants.WORLD_HEIGHT - 1; y >= 0; y--) {
+                if (chunk.getBlock(lx, y, lz) == Blocks.GRASS.id()) {
+                    height = y;
+                    break;
+                }
+            }
+            if (height < 0 || height <= WorldConstants.SEA_LEVEL) continue;
 
             // Must have air above
             int above = height + 1;
