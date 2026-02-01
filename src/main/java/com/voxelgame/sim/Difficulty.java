@@ -39,7 +39,7 @@ public enum Difficulty {
     public float getDamageMultiplier(DamageSource source) {
         return switch (source) {
             case MOB -> mobDamageMultiplier;
-            case FALL, VOID, GENERIC -> envDamageMultiplier;
+            case FALL, VOID, GENERIC -> 1.0f; // Environmental damage never scales
         };
     }
 
