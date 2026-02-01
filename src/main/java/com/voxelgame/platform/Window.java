@@ -3,6 +3,8 @@ package com.voxelgame.platform;
 import org.lwjgl.glfw.*;
 import org.lwjgl.system.MemoryStack;
 
+import java.nio.IntBuffer;
+
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.system.MemoryUtil.NULL;
 
@@ -10,8 +12,10 @@ import static org.lwjgl.system.MemoryUtil.NULL;
 public class Window {
 
     private long handle;
-    private int width;
+    private int width;              // Window size in logical (screen) pixels
     private int height;
+    private int framebufferWidth;   // Framebuffer size in physical pixels (may differ on HiDPI)
+    private int framebufferHeight;
     private boolean resized;
 
     public Window(int width, int height, String title) {
@@ -37,11 +41,27 @@ public class Window {
             throw new RuntimeException("Failed to create GLFW window");
         }
 
+        // Track framebuffer size (for glViewport — physical pixels)
         glfwSetFramebufferSizeCallback(handle, (window, w, h) -> {
-            this.width = w;
-            this.height = h;
+            this.framebufferWidth = w;
+            this.framebufferHeight = h;
             this.resized = true;
         });
+
+        // Track window size (for UI/mouse coordinates — logical pixels)
+        glfwSetWindowSizeCallback(handle, (window, w, h) -> {
+            this.width = w;
+            this.height = h;
+        });
+
+        // Initialize framebuffer size (may differ from window size on HiDPI/Retina)
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            IntBuffer pW = stack.mallocInt(1);
+            IntBuffer pH = stack.mallocInt(1);
+            glfwGetFramebufferSize(handle, pW, pH);
+            this.framebufferWidth = pW.get(0);
+            this.framebufferHeight = pH.get(0);
+        }
 
         // Center window (monitor can be null in some launch contexts)
         long monitor = glfwGetPrimaryMonitor();
@@ -91,6 +111,12 @@ public class Window {
     }
 
     public long getHandle() { return handle; }
+    /** Window width in logical (screen) pixels — matches GLFW mouse coordinates. */
     public int getWidth() { return width; }
+    /** Window height in logical (screen) pixels — matches GLFW mouse coordinates. */
     public int getHeight() { return height; }
+    /** Framebuffer width in physical pixels — use for glViewport. */
+    public int getFramebufferWidth() { return framebufferWidth; }
+    /** Framebuffer height in physical pixels — use for glViewport. */
+    public int getFramebufferHeight() { return framebufferHeight; }
 }

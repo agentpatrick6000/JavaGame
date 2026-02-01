@@ -171,7 +171,7 @@ public class GameLoop {
     private void init() {
         window = new Window(1280, 720, "VoxelGame");
         GLInit.init();
-        GLInit.setViewport(window.getWidth(), window.getHeight());
+        GLInit.setViewport(window.getFramebufferWidth(), window.getFramebufferHeight());
 
         time = new Time();
         time.init();
@@ -532,7 +532,7 @@ public class GameLoop {
             window.pollEvents();
 
             if (window.wasResized()) {
-                GLInit.setViewport(window.getWidth(), window.getHeight());
+                GLInit.setViewport(window.getFramebufferWidth(), window.getFramebufferHeight());
             }
 
             int w = window.getWidth();
@@ -793,9 +793,9 @@ public class GameLoop {
         // Render
         renderGameWorld(w, h, dt);
 
-        // Screenshot (F2)
+        // Screenshot (F2) — use framebuffer dimensions for glReadPixels
         if (Input.isKeyPressed(GLFW_KEY_F2)) {
-            Screenshot.capture(w, h);
+            Screenshot.capture(window.getFramebufferWidth(), window.getFramebufferHeight());
         }
 
         // Auto-test mode
@@ -1015,13 +1015,15 @@ public class GameLoop {
     // ---- Auto-test ----
 
     private void updateAutoTest(int w, int h, float dt) {
+        int fbW = window.getFramebufferWidth();
+        int fbH = window.getFramebufferHeight();
         autoTestTimer += dt;
         switch (autoTestPhase) {
             case 0:
                 if (autoTestTimer > 3.0f) { autoTestPhase = 1; autoTestTimer = 0; }
                 break;
             case 1:
-                Screenshot.capture(w, h);
+                Screenshot.capture(fbW, fbH);
                 autoTestPhase = 2; autoTestTimer = 0;
                 break;
             case 2:
@@ -1031,7 +1033,7 @@ public class GameLoop {
                 }
                 break;
             case 3:
-                Screenshot.capture(w, h);
+                Screenshot.capture(fbW, fbH);
                 autoTestPhase = 4; autoTestTimer = 0;
                 break;
             case 4:
@@ -1042,7 +1044,7 @@ public class GameLoop {
                 break;
             case 5:
                 if (autoTestTimer > 3.0f) {
-                    Screenshot.capture(w, h);
+                    Screenshot.capture(fbW, fbH);
                     autoTestPhase = 6; autoTestTimer = 0;
                 }
                 break;
