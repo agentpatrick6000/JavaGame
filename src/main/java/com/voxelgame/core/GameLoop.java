@@ -16,6 +16,7 @@ import com.voxelgame.sim.Player;
 import com.voxelgame.ui.BitmapFont;
 import com.voxelgame.ui.DebugOverlay;
 import com.voxelgame.ui.Hud;
+import com.voxelgame.world.Blocks;
 import com.voxelgame.world.ChunkPos;
 import com.voxelgame.world.Lighting;
 import com.voxelgame.world.Raycast;
@@ -289,20 +290,46 @@ public class GameLoop {
         boolean rightClick = agentUse || (Input.isCursorLocked() && Input.isRightMouseClicked());
 
         if (leftClick && currentHit != null) {
+            // Capture block info before destroying it
+            int brokenBlockId = world.getBlock(currentHit.x(), currentHit.y(), currentHit.z());
+            String brokenBlockName = Blocks.get(brokenBlockId).name();
+
             world.setBlock(currentHit.x(), currentHit.y(), currentHit.z(), 0); // AIR
             Set<ChunkPos> affected = Lighting.onBlockRemoved(world, currentHit.x(), currentHit.y(), currentHit.z());
             chunkManager.rebuildMeshAt(currentHit.x(), currentHit.y(), currentHit.z());
             chunkManager.rebuildChunks(affected);
+
+            // Report result for agent-triggered attacks
+            if (agentAttack && agentActionQueue != null) {
+                agentActionQueue.setLastResult(new ActionQueue.ActionResult(
+                    "action_attack", true, brokenBlockName,
+                    currentHit.x(), currentHit.y(), currentHit.z()));
+            }
+        } else if (agentAttack && agentActionQueue != null) {
+            // Agent attacked but missed (no block in crosshair)
+            agentActionQueue.setLastResult(new ActionQueue.ActionResult(
+                "action_attack", false, null, 0, 0, 0));
         }
 
         if (rightClick && currentHit != null) {
             int px = currentHit.x() + currentHit.nx();
             int py = currentHit.y() + currentHit.ny();
             int pz = currentHit.z() + currentHit.nz();
-            world.setBlock(px, py, pz, player.getSelectedBlock());
+            int placedBlockId = player.getSelectedBlock();
+            world.setBlock(px, py, pz, placedBlockId);
             Set<ChunkPos> affected = Lighting.onBlockPlaced(world, px, py, pz);
             chunkManager.rebuildMeshAt(px, py, pz);
             chunkManager.rebuildChunks(affected);
+
+            // Report result for agent-triggered use actions
+            if (agentUse && agentActionQueue != null) {
+                agentActionQueue.setLastResult(new ActionQueue.ActionResult(
+                    "action_use", true, Blocks.get(placedBlockId).name(), px, py, pz));
+            }
+        } else if (agentUse && agentActionQueue != null) {
+            // Agent used but missed (no block surface to place on)
+            agentActionQueue.setLastResult(new ActionQueue.ActionResult(
+                "action_use", false, null, 0, 0, 0));
         }
     }
 

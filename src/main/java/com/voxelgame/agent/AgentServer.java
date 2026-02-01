@@ -2,6 +2,7 @@ package com.voxelgame.agent;
 
 import com.voxelgame.render.Camera;
 import com.voxelgame.sim.Player;
+import com.voxelgame.world.Blocks;
 import com.voxelgame.world.WorldAccess;
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
@@ -130,6 +131,18 @@ public class AgentServer extends WebSocketServer {
         // TODO: health system doesn't exist yet — stub at 20.0 (full health)
         Messages.appendUiState(sb, 20.0f, player.getSelectedSlot(),
                                player.isFlyMode(), player.isOnGround());
+
+        // Hotbar contents
+        String[] hotbarContents = new String[Player.HOTBAR_SIZE];
+        for (int i = 0; i < Player.HOTBAR_SIZE; i++) {
+            int blockId = player.getHotbarBlock(i);
+            hotbarContents[i] = blockId == 0 ? null : Blocks.get(blockId).name();
+        }
+        Messages.appendHotbarContents(sb, hotbarContents);
+
+        // Last action result (consumed once, then null until next action)
+        ActionQueue.ActionResult lastResult = actionQueue.consumeLastResult();
+        Messages.appendLastActionResult(sb, lastResult);
 
         // Sound events (stub)
         Messages.appendSoundEvents(sb);

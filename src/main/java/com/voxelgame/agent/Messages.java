@@ -117,7 +117,7 @@ public final class Messages {
      */
     public static String buildHello() {
         return """
-        {"type":"hello","version":"1.0","capabilities":{"simscreen_width":64,"simscreen_height":36,"tick_rate_hz":20,"max_reach":8.0,"actions":["action_look","action_move","action_jump","action_crouch","action_sprint","action_use","action_attack","action_hotbar_select"]},"schema":{"state":{"tick":"int","pose":{"x":"float","y":"float","z":"float","yaw":"float","pitch":"float"},"simscreen":"array[64][36] of {cls:string,depth:int(0-5),light:int(0-3)}","raycast":{"hit_type":"block|entity|miss","hit_class":"CellClass","hit_id":"string","hit_dist":"int(0-5)","hit_normal":"TOP|BOTTOM|NORTH|SOUTH|EAST|WEST|NONE"},"ui_state":{"health":"float","hotbar_selected":"int(0-8)","fly_mode":"bool","on_ground":"bool"},"sound_events":"array (stub, currently empty)"},"actions":{"action_look":{"yaw":"float","pitch":"float"},"action_move":{"forward":"float(-1..1)","strafe":"float(-1..1)","duration":"int(ms)"},"action_jump":{},"action_crouch":{"toggle":"bool"},"action_sprint":{"toggle":"bool"},"action_use":{},"action_attack":{},"action_hotbar_select":{"slot":"int(0-8)"}}},"operator_guide":"You are a player in a voxel world. POV-bound: only what you see/hear exists. No god-mode, no map, no coordinates. CAMERA: Yaw=horizontal (-180 to 180°, 0=north), Pitch=vertical (-90=down,0=horizon,90=up). action_look uses DELTAS, not absolute. To look at (dx,dy,dz) relative to you: dyaw=atan2(dx,dz)*57.3, dpitch=atan2(dy,sqrt(dx²+dz²))*57.3. MOVEMENT: Walk=1.0, sprint=1.5×, fly=creative flight. Jump height~1.2 blocks. Gravity when on_ground=false and fly_mode=false. BLOCKS: action_use places from hotbar[hotbar_selected]. Raycast shows surface+face you're pointing at. New block appears on adjacent face: hit TOP → block goes above, hit NORTH → block goes north side. Break with action_attack. HOTBAR: 9 slots (0-8), change with action_hotbar_select. SURVIVAL (stubs): Health=20 (no damage yet), no hunger, no enemies, no drowning, fall damage disabled. MEMORY: STM=last 30 ticks, MTM=episode summaries, LTM=learned facts. Tag provenance (seen|heard|inferred) + confidence.","memory_contract":{"stm":"last 30 ticks of raw state — ephemeral, overwritten each cycle","mtm":"summarized episodes (e.g. 'walked north 50 blocks, found river') — persist across sessions","ltm":"learned facts and skills (e.g. 'stone is at y<60') — permanent, provenance-tagged","provenance":"each memory entry should note: source (observation|inference|told), confidence (0-1), tick_range"}}""";
+        {"type":"hello","version":"1.0","capabilities":{"simscreen_width":64,"simscreen_height":36,"tick_rate_hz":20,"max_reach":8.0,"actions":["action_look","action_move","action_jump","action_crouch","action_sprint","action_use","action_attack","action_hotbar_select"]},"schema":{"state":{"tick":"int","pose":{"x":"float","y":"float","z":"float","yaw":"float","pitch":"float"},"simscreen":"array[64][36] of {cls:string,depth:int(0-5),light:int(0-3)}","raycast":{"hit_type":"block|entity|miss","hit_class":"CellClass","hit_id":"string","hit_dist":"int(0-5)","hit_normal":"TOP|BOTTOM|NORTH|SOUTH|EAST|WEST|NONE"},"ui_state":{"health":"float","hotbar_selected":"int(0-8)","fly_mode":"bool","on_ground":"bool"},"hotbar_contents":"array[9] of string|null (block names in each slot)","last_action_result":"null or {action:string,success:bool,block:string|null,pos:[x,y,z]}","sound_events":"array (stub, currently empty)"},"actions":{"action_look":{"yaw":"float","pitch":"float"},"action_move":{"forward":"float(-1..1)","strafe":"float(-1..1)","duration":"int(ms)"},"action_jump":{},"action_crouch":{"toggle":"bool"},"action_sprint":{"toggle":"bool"},"action_use":{},"action_attack":{},"action_hotbar_select":{"slot":"int(0-8)"}}},"operator_guide":"You are a player in a voxel world. POV-bound: only what you see/hear exists. No god-mode, no map, no coordinates. CAMERA: Yaw=horizontal (-180 to 180°, 0=north), Pitch=vertical (-90=down,0=horizon,90=up). action_look uses DELTAS, not absolute. To look at (dx,dy,dz) relative to you: dyaw=atan2(dx,dz)*57.3, dpitch=atan2(dy,sqrt(dx²+dz²))*57.3. MOVEMENT: Walk=1.0, sprint=1.5×, fly=creative flight. Jump height~1.2 blocks. Gravity when on_ground=false and fly_mode=false. BLOCKS: action_use places from hotbar[hotbar_selected]. Raycast shows surface+face you're pointing at. New block appears on adjacent face: hit TOP → block goes above, hit NORTH → block goes north side. Break with action_attack. HOTBAR: 9 slots (0-8), change with action_hotbar_select. SURVIVAL (stubs): Health=20 (no damage yet), no hunger, no enemies, no drowning, fall damage disabled. MEMORY: STM=last 30 ticks, MTM=episode summaries, LTM=learned facts. Tag provenance (seen|heard|inferred) + confidence.","memory_contract":{"stm":"last 30 ticks of raw state — ephemeral, overwritten each cycle","mtm":"summarized episodes (e.g. 'walked north 50 blocks, found river') — persist across sessions","ltm":"learned facts and skills (e.g. 'stone is at y<60') — permanent, provenance-tagged","provenance":"each memory entry should note: source (observation|inference|told), confidence (0-1), tick_range"}}""";
     }
 
     // ---- State message (per-tick) ----
@@ -157,6 +157,47 @@ public final class Messages {
         sb.append(",\"hotbar_selected\":").append(hotbarSelected);
         sb.append(",\"fly_mode\":").append(flyMode);
         sb.append(",\"on_ground\":").append(onGround).append('}');
+    }
+
+    /**
+     * Append hotbar contents to state message.
+     * Each entry is a block name string or null for empty slots.
+     * Format: "hotbar_contents":["stone","dirt",null,...]
+     *
+     * @param sb     the state message builder
+     * @param hotbar array of block names (null = empty slot)
+     */
+    public static void appendHotbarContents(StringBuilder sb, String[] hotbar) {
+        sb.append(",\"hotbar_contents\":[");
+        for (int i = 0; i < hotbar.length; i++) {
+            if (i > 0) sb.append(',');
+            if (hotbar[i] == null) {
+                sb.append("null");
+            } else {
+                sb.append(jsonStr(hotbar[i]));
+            }
+        }
+        sb.append(']');
+    }
+
+    /**
+     * Append last action result feedback to state message.
+     * Format: "last_action_result":{"action":"action_use","success":true,"block":"stone","pos":[x,y,z]}
+     * Appends null if no result is available.
+     *
+     * @param sb     the state message builder
+     * @param result the action result, or null
+     */
+    public static void appendLastActionResult(StringBuilder sb, ActionQueue.ActionResult result) {
+        if (result == null) {
+            sb.append(",\"last_action_result\":null");
+            return;
+        }
+        sb.append(",\"last_action_result\":{\"action\":").append(jsonStr(result.action()));
+        sb.append(",\"success\":").append(result.success());
+        sb.append(",\"block\":").append(result.block() == null ? "null" : jsonStr(result.block()));
+        sb.append(",\"pos\":[").append(result.x()).append(',').append(result.y()).append(',').append(result.z());
+        sb.append("]}");
     }
 
     /**

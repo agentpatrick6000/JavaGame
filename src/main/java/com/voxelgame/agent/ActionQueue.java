@@ -14,6 +14,17 @@ import java.util.function.Consumer;
 public class ActionQueue {
 
     /**
+     * Result of the last agent-triggered action (block place/break).
+     * Consumed once by state broadcast, then cleared.
+     */
+    public record ActionResult(
+        String action,   // "action_use", "action_attack", etc.
+        boolean success,
+        String block,    // block name involved (or null)
+        int x, int y, int z  // position (0,0,0 if N/A)
+    ) {}
+
+    /**
      * A single agent action with type tag and parameters.
      */
     public record AgentAction(
@@ -62,6 +73,9 @@ public class ActionQueue {
     private final AtomicLong totalEnqueued = new AtomicLong(0);
     private final AtomicLong totalProcessed = new AtomicLong(0);
 
+    /** Last action result for agent feedback. Volatile for cross-thread visibility. */
+    private volatile ActionResult lastResult = null;
+
     /**
      * Enqueue an action from an agent. Thread-safe.
      */
@@ -108,5 +122,25 @@ public class ActionQueue {
      */
     public void clear() {
         queue.clear();
+    }
+
+    /**
+     * Set the result of the last agent-triggered action.
+     * Called from the game loop after block place/break.
+     */
+    public void setLastResult(ActionResult result) {
+        this.lastResult = result;
+    }
+
+    /**
+     * Consume the last action result (read once, then clear).
+     * Called from AgentServer during state broadcast.
+     *
+     * @return the last result, or null if none pending
+     */
+    public ActionResult consumeLastResult() {
+        ActionResult r = lastResult;
+        lastResult = null;
+        return r;
     }
 }
