@@ -66,9 +66,13 @@ public class GameLoop {
     private DeathScreen deathScreen;
     private InventoryScreen inventoryScreen;
 
-    // Item entities
+    // Survival mechanics
     private BlockBreakProgress blockBreakProgress;
     private ItemEntityManager itemEntityManager;
+
+    // Survival mechanics
+
+    // Item entities
     private ItemEntityRenderer itemEntityRenderer;
 
     // Current raycast hit (updated each frame)
@@ -542,10 +546,11 @@ public class GameLoop {
         if (spawnDrops) {
             int dropId = block.getDrop();
             if (dropId > 0) {
-                itemEntities.add(new ItemEntity(dropId, 1, bx + 0.5f, by + 0.5f, bz + 0.5f));
+                itemEntityManager.spawnDrop(dropId, 1, bx, by, bz);
             }
         }
     }
+
     private void performAutoSave() {
         try {
             int saved = saveManager.saveModifiedChunks(world);
