@@ -3,6 +3,7 @@ package com.voxelgame.sim;
 import com.voxelgame.agent.ActionQueue;
 import com.voxelgame.platform.Input;
 import com.voxelgame.render.Camera;
+import com.voxelgame.ui.CreativeInventoryScreen;
 import com.voxelgame.ui.InventoryScreen;
 import org.joml.Vector3f;
 
@@ -77,8 +78,9 @@ public class Controller {
     private int breakingBlockX, breakingBlockY, breakingBlockZ; // currently breaking
     private boolean isBreaking = false;
 
-    // ---- Inventory screen ----
+    // ---- Inventory screens ----
     private InventoryScreen inventoryScreen = null;
+    private CreativeInventoryScreen creativeInventoryScreen = null;
 
     public Controller(Player player) {
         this.player = player;
@@ -89,9 +91,14 @@ public class Controller {
         this.agentActionQueue = queue;
     }
 
-    /** Set the inventory screen reference (for E key toggle). */
+    /** Set the inventory screen reference (for E key toggle in survival mode). */
     public void setInventoryScreen(InventoryScreen screen) {
         this.inventoryScreen = screen;
+    }
+
+    /** Set the creative inventory screen reference (for E key toggle in creative mode). */
+    public void setCreativeInventoryScreen(CreativeInventoryScreen screen) {
+        this.creativeInventoryScreen = screen;
     }
 
     public void update(float dt) {
@@ -161,11 +168,29 @@ public class Controller {
 
     private void handleInventoryToggle() {
         if (Input.isKeyPressed(GLFW_KEY_E)) {
-            if (inventoryScreen != null) {
+            if (player.getGameMode() == GameMode.CREATIVE && creativeInventoryScreen != null) {
+                // Creative mode: use creative inventory
+                if (creativeInventoryScreen.isOpen()) {
+                    creativeInventoryScreen.close(player.getInventory());
+                    Input.lockCursor();
+                } else {
+                    // Close survival inventory if open
+                    if (inventoryScreen != null && inventoryScreen.isOpen()) {
+                        inventoryScreen.close(player.getInventory());
+                    }
+                    creativeInventoryScreen.setVisible(true);
+                    Input.unlockCursor();
+                }
+            } else if (inventoryScreen != null) {
+                // Survival mode: use standard inventory
                 if (inventoryScreen.isOpen()) {
                     inventoryScreen.close(player.getInventory());
                     Input.lockCursor();
                 } else {
+                    // Close creative inventory if open
+                    if (creativeInventoryScreen != null && creativeInventoryScreen.isOpen()) {
+                        creativeInventoryScreen.close(player.getInventory());
+                    }
                     inventoryScreen.setVisible(true);
                     Input.unlockCursor();
                 }
@@ -173,9 +198,10 @@ public class Controller {
         }
     }
 
-    /** Check if inventory screen is open (to suppress game interactions). */
+    /** Check if any inventory screen is open (to suppress game interactions). */
     public boolean isInventoryOpen() {
-        return inventoryScreen != null && inventoryScreen.isOpen();
+        return (inventoryScreen != null && inventoryScreen.isOpen())
+            || (creativeInventoryScreen != null && creativeInventoryScreen.isOpen());
     }
 
     /** Whether any UI screen is open that should suppress normal controls. */

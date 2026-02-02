@@ -20,6 +20,7 @@ public class Main {
         boolean agentServerMode = false;
         boolean autoTestMode = false;
         boolean directMode = false;
+        boolean createMode = false;
         String directWorldName = null;
         String scriptPath = null;
 
@@ -29,6 +30,13 @@ public class Main {
                 case "--automation" -> automationMode = true;
                 case "--agent-server" -> agentServerMode = true;
                 case "--auto-test" -> autoTestMode = true;
+                case "--create" -> {
+                    createMode = true;
+                    directMode = true;
+                    if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
+                        directWorldName = args[++i];
+                    }
+                }
                 case "--direct" -> {
                     directMode = true;
                     // Optional world name after --direct
@@ -86,8 +94,10 @@ public class Main {
         loop.setAutoTestMode(autoTestMode);
         loop.setScriptPath(scriptPath);
 
-        // Direct mode skips the menu
-        if (directMode) {
+        // Direct/create mode skips the menu
+        if (createMode) {
+            loop.setCreateNewWorld(directWorldName);
+        } else if (directMode) {
             loop.setDirectWorld(directWorldName);
         }
 

@@ -3,6 +3,7 @@ in vec2 vTexCoord;
 in float vSkyLight;
 in float vBlockLight;
 in float vFogFactor;
+in vec3 vViewPos;
 
 uniform sampler2D uAtlas;
 uniform float uAlpha;         // 1.0 for opaque pass, <1.0 for transparent pass
@@ -10,6 +11,9 @@ uniform float uSunBrightness; // 0.0 = midnight, 1.0 = noon
 uniform vec3 uFogColor;       // sky/fog color (matches clear color)
 
 out vec4 fragColor;
+// NOTE: MRT normal output (layout location=1) removed — requires FBO with
+// multiple color attachments. Writing to location 1 on the default framebuffer
+// causes SIGABRT on macOS. Re-enable when PostFX pipeline is wired in.
 
 // Minimum ambient light so caves aren't pitch black (starlight)
 const float MIN_AMBIENT = 0.02;

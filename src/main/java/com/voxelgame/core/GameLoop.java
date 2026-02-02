@@ -9,6 +9,7 @@ import com.voxelgame.render.BlockHighlight;
 import com.voxelgame.render.EntityRenderer;
 import com.voxelgame.render.GLInit;
 import com.voxelgame.render.ItemEntityRenderer;
+import com.voxelgame.render.PostFX;
 import com.voxelgame.render.Renderer;
 import com.voxelgame.save.SaveManager;
 import com.voxelgame.save.WorldMeta;
@@ -41,6 +42,7 @@ import com.voxelgame.ui.FurnaceScreen;
 import com.voxelgame.ui.Hud;
 import com.voxelgame.ui.ChestScreen;
 import com.voxelgame.ui.FurnaceScreen;
+import com.voxelgame.ui.CreativeInventoryScreen;
 import com.voxelgame.ui.InventoryScreen;
 import com.voxelgame.ui.MainMenuScreen;
 import com.voxelgame.ui.PauseMenuScreen;
@@ -96,6 +98,7 @@ public class GameLoop {
     private World world;
     private ChunkManager chunkManager;
     private Renderer renderer;
+    private PostFX postFX;
     private SaveManager saveManager;
 
     // UI screens
@@ -174,6 +177,15 @@ public class GameLoop {
     /** Enable auto-test mode (scripted screenshot sequence, then exit). */
     public void setAutoTestMode(boolean enabled) { this.autoTestMode = enabled; }
 
+    // Track create-new-world mode (--create flag)
+    private boolean createNewWorldMode = false;
+
+    /** Create a brand new world on launch (uses createAndStartWorld path). */
+    public void setCreateNewWorld(String worldName) {
+        this.createNewWorldMode = true;
+        this.currentWorldFolder = worldName != null ? worldName : "test-create";
+    }
+
     /**
      * Skip the menu and go directly to a world (legacy / automation mode).
      * If worldName is null, uses "default".
@@ -244,7 +256,12 @@ public class GameLoop {
         settingsScreen.setCallback(() -> closeSettings());
 
         // Check if direct world mode was requested (automation/legacy)
-        if (currentWorldFolder != null) {
+        if (createNewWorldMode && currentWorldFolder != null) {
+            // Create a brand new world (same path as UI "Create World")
+            createAndStartWorld(currentWorldFolder, GameMode.SURVIVAL,
+                                Difficulty.NORMAL, null);
+            System.out.println("VoxelGame initialized — created new world: " + currentWorldFolder);
+        } else if (currentWorldFolder != null) {
             // Skip menu, load world directly
             loadAndStartWorld(currentWorldFolder);
             System.out.println("VoxelGame initialized — direct world: " + currentWorldFolder);
@@ -356,6 +373,9 @@ public class GameLoop {
         physics.setWorld(world);
         renderer = new Renderer(world);
         renderer.init();
+
+        postFX = new PostFX();
+        postFX.init(window.getFramebufferWidth(), window.getFramebufferHeight());
 
         chunkManager = new ChunkManager(world);
         chunkManager.setSaveManager(saveManager);
@@ -564,6 +584,7 @@ public class GameLoop {
         if (entityRenderer != null) entityRenderer.cleanup();
         if (itemEntityRenderer != null) itemEntityRenderer.cleanup();
         if (hud != null) hud.cleanup();
+        if (postFX != null) postFX.cleanup();
         if (renderer != null) renderer.cleanup();
 
         player = null;
@@ -572,6 +593,7 @@ public class GameLoop {
         world = null;
         chunkManager = null;
         renderer = null;
+        postFX = null;
         saveManager = null;
         hud = null;
         debugOverlay = null;
@@ -606,6 +628,9 @@ public class GameLoop {
 
             if (window.wasResized()) {
                 GLInit.setViewport(window.getFramebufferWidth(), window.getFramebufferHeight());
+                if (postFX != null) {
+                    postFX.resize(window.getFramebufferWidth(), window.getFramebufferHeight());
+                }
             }
 
             int w = window.getWidth();
@@ -938,14 +963,29 @@ public class GameLoop {
     private void renderGameWorld(int w, int h, float dt) {
         if (!gameInitialized) return;
 
-        // Update sky color based on time of day
+        // Update lighting state from world time
         if (worldTime != null) {
             float[] skyColor = worldTime.getSkyColor();
             glClearColor(skyColor[0], skyColor[1], skyColor[2], 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-            // Update renderer's sun brightness for shader
             renderer.updateLighting(worldTime);
+        }
+
+        // Use framebuffer dimensions for rendering (HiDPI aware)
+        int fbW = window.getFramebufferWidth();
+        int fbH = window.getFramebufferHeight();
+
+        // Begin post-processing capture (render to FBO)
+        boolean usePostFX = postFX != null && postFX.isInitialized();
+        if (usePostFX) {
+            postFX.beginSceneCapture();
+            // Set sky clear color in the FBO too
+            if (worldTime != null) {
+                float[] skyColor = worldTime.getSkyColor();
+                glClearColor(skyColor[0], skyColor[1], skyColor[2], 1.0f);
+            }
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        } else {
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         }
 
         // 3D rendering
@@ -955,7 +995,7 @@ public class GameLoop {
         glEnable(GL_CULL_FACE);
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-        renderer.render(player.getCamera(), w, h);
+        renderer.render(player.getCamera(), fbW, fbH);
 
         // Item entities
         itemEntityRenderer.render(player.getCamera(), w, h, itemEntityManager.getItems());
@@ -967,6 +1007,14 @@ public class GameLoop {
         if (currentHit != null) {
             blockHighlight.render(player.getCamera(), w, h,
                 currentHit.x(), currentHit.y(), currentHit.z());
+        }
+
+        // End PostFX capture and apply effects (SSAO + tone mapping)
+        if (usePostFX) {
+            org.joml.Matrix4f projection = player.getCamera().getProjectionMatrix(fbW, fbH);
+            org.joml.Matrix4f view = player.getCamera().getViewMatrix();
+            postFX.endSceneAndApplyEffects(projection, view);
+            GLInit.setViewport(fbW, fbH); // restore viewport after PostFX
         }
 
         // 2D UI overlay

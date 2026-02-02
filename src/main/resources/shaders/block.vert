@@ -12,16 +12,19 @@ out vec2 vTexCoord;
 out float vSkyLight;
 out float vBlockLight;
 out float vFogFactor;
+out vec3 vViewPos;   // view-space position (for SSAO)
 
 // Fog parameters
 const float FOG_START = 80.0;
 const float FOG_END = 128.0;
 
 void main() {
-    gl_Position = uProjection * uView * vec4(aPos, 1.0);
+    vec4 viewPos4 = uView * vec4(aPos, 1.0);
+    gl_Position = uProjection * viewPos4;
     vTexCoord = aTexCoord;
     vSkyLight = aSkyLight;
     vBlockLight = aBlockLight;
+    vViewPos = viewPos4.xyz;
 
     // Distance-based fog (linear)
     float dist = length(aPos - uCameraPos);
