@@ -35,8 +35,8 @@ public class WorldTime {
     public static final int DAWN_START    = 23000;
 
     // ---- Brightness tuning ----
-    /** Peak sun brightness at midday. 1.0 was overexposed; 0.8 gives bright but natural daylight. */
-    private static final float PEAK_SUN_BRIGHTNESS = 0.8f;
+    /** Peak sun brightness at midday. 1.0 was overexposed; 0.65 gives bright but natural daylight. */
+    private static final float PEAK_SUN_BRIGHTNESS = 0.65f;
     /** Minimum brightness at full night (moonlight). Keeps night very dark; torches essential. */
     private static final float NIGHT_BRIGHTNESS = 0.05f;
     /** Brightness range for transition interpolation. */
