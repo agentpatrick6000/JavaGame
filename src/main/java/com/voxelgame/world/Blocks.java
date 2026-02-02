@@ -252,12 +252,13 @@ public final class Blocks {
     public static final Block WHEAT_CROP_5         = new Block(121, "wheat_crop_5", false, true, new int[]{0}, 0.0f, -1);
     public static final Block WHEAT_CROP_6         = new Block(122, "wheat_crop_6", false, true, new int[]{0}, 0.0f, -1);
     public static final Block WHEAT_CROP_7         = new Block(123, "wheat_crop_7", false, true, new int[]{0}, 0.0f, -1);
+    public static final Block LEATHER              = new Block(124, "leather", false, true, new int[]{0}, 0.0f, -1);
 
     /** All blocks indexed by ID for fast lookup. */
     private static final Block[] REGISTRY;
 
     static {
-        REGISTRY = new Block[124]; // IDs 0-97
+        REGISTRY = new Block[125]; // IDs 0-124
         REGISTRY[0]  = AIR;          REGISTRY[1]  = STONE;         REGISTRY[2]  = COBBLESTONE;
         REGISTRY[3]  = DIRT;         REGISTRY[4]  = GRASS;         REGISTRY[5]  = SAND;
         REGISTRY[6]  = GRAVEL;       REGISTRY[7]  = LOG;           REGISTRY[8]  = LEAVES;
@@ -296,16 +297,6 @@ public final class Blocks {
         REGISTRY[91] = BRICK;           REGISTRY[92] = SPONGE;          REGISTRY[93] = BOOKSHELF;
         REGISTRY[94] = NOTE_BLOCK;      REGISTRY[95] = JUKEBOX;         REGISTRY[96] = PUMPKIN;
         REGISTRY[97] = JACK_O_LANTERN;
-    }
-
-    /**
-     * Returns the block for the given ID.
-     * @param id block ID (0–14)
-     * @return the Block, or AIR if out of range
-     */
-    public static Block get(int id) {
-        if (id < 0 || id >= REGISTRY.length) return AIR;
-        return REGISTRY[id];
         REGISTRY[98] = LEATHER_HELMET;
         REGISTRY[99] = LEATHER_CHESTPLATE;
         REGISTRY[100] = LEATHER_LEGGINGS;
@@ -332,6 +323,17 @@ public final class Blocks {
         REGISTRY[121] = WHEAT_CROP_5;
         REGISTRY[122] = WHEAT_CROP_6;
         REGISTRY[123] = WHEAT_CROP_7;
+        REGISTRY[124] = LEATHER;
+    }
+
+    /**
+     * Returns the block for the given ID.
+     * @param id block ID (0–14)
+     * @return the Block, or AIR if out of range
+     */
+    public static Block get(int id) {
+        if (id < 0 || id >= REGISTRY.length) return AIR;
+        return REGISTRY[id];
     }
 
     /** Total number of registered block types. */
