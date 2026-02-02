@@ -416,8 +416,10 @@ public class Controller {
         float speed = WALK_SPEED;
         if (sprinting) speed *= SPRINT_MULTIPLIER;
 
-        // Water speed reduction
-        if (player.isInWater()) {
+        // Fluid speed reduction
+        if (player.isInLava()) {
+            speed *= Physics.LAVA_SPEED_MULTIPLIER;
+        } else if (player.isInWater()) {
             speed *= Physics.WATER_SPEED_MULTIPLIER;
         }
 
@@ -479,7 +481,10 @@ public class Controller {
 
         // Jump / Swim up
         if (Input.isKeyDown(GLFW_KEY_SPACE)) {
-            if (player.isInWater()) {
+            if (player.isInLava()) {
+                // Swim upward in lava (very slow)
+                vel.y = 2.0f;
+            } else if (player.isInWater()) {
                 // Swim upward in water
                 vel.y = 4.0f;
             } else {

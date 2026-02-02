@@ -62,10 +62,11 @@ public class Player {
     private float attackCooldown = 0.0f;
     private static final float ATTACK_COOLDOWN_TIME = 0.4f;
 
-    // ---- Swimming / Water state ----
+    // ---- Swimming / Water / Lava state ----
     private boolean inWater = false;
     private boolean headUnderwater = false;
     private float oxygen = Physics.MAX_OXYGEN;
+    private boolean inLava = false;
 
     // ---- Mounted entity (boat / minecart) ----
     private Entity mountedEntity = null;
@@ -90,6 +91,9 @@ public class Player {
         inventory.setSlot(6, new Inventory.ItemStack(Blocks.LEAVES.id(), 64));
         inventory.setSlot(7, new Inventory.ItemStack(Blocks.GRAVEL.id(), 64));
         inventory.setSlot(8, new Inventory.ItemStack(Blocks.WATER.id(), 64));
+        // Add lava and obsidian to storage slots (accessible via E key)
+        inventory.setSlot(9, new Inventory.ItemStack(Blocks.LAVA.id(), 64));
+        inventory.setSlot(10, new Inventory.ItemStack(Blocks.OBSIDIAN.id(), 64));
     }
 
     // --- Camera / Position ---
@@ -440,6 +444,13 @@ public class Player {
     public void refillOxygen() {
         oxygen = Physics.MAX_OXYGEN;
     }
+
+    // ================================================================
+    // Lava state
+    // ================================================================
+
+    public boolean isInLava() { return inLava; }
+    public void setInLava(boolean inLava) { this.inLava = inLava; }
 
     // ================================================================
     // Mounted entity (boat / minecart)

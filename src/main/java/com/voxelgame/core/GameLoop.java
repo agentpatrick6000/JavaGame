@@ -56,6 +56,7 @@ import com.voxelgame.world.Blocks;
 import com.voxelgame.world.ChunkPos;
 import com.voxelgame.world.Lighting;
 import com.voxelgame.world.Raycast;
+import com.voxelgame.world.FluidSimulator;
 import com.voxelgame.world.World;
 import com.voxelgame.world.WorldTime;
 import com.voxelgame.world.gen.GenConfig;
@@ -155,6 +156,11 @@ public class GameLoop {
     // Furnace tick timer (20 ticks/second = 0.05s per tick)
     private float furnaceTickTimer = 0;
     private static final float FURNACE_TICK_INTERVAL = 0.05f;
+
+    // Fluid simulation (water/lava flow, 20 TPS)
+    private FluidSimulator fluidSimulator;
+    private float fluidTickTimer = 0;
+    private static final float FLUID_TICK_INTERVAL = 0.05f; // 20 TPS
 
     // Auto-test mode (for automated screenshot testing)
     private boolean autoTestMode = false;
@@ -297,7 +303,8 @@ public class GameLoop {
         if (createNewWorldMode && currentWorldFolder != null) {
             // Create a brand new world (same path as UI "Create World")
             createAndStartWorld(currentWorldFolder, GameMode.SURVIVAL,
-                                Difficulty.NORMAL, null);
+                                Difficulty.NORMAL, null,
+                                WorldGenPreset.DEFAULT, GenConfig.defaultConfig());
             System.out.println("VoxelGame initialized — created new world: " + currentWorldFolder);
         } else if (currentWorldFolder != null) {
             // Skip menu, load world directly
@@ -596,6 +603,9 @@ public class GameLoop {
         worldTime = new WorldTime();
         entityManager = new EntityManager();
         mobSpawner = new MobSpawner();
+
+        // Fluid simulation
+        fluidSimulator = new FluidSimulator(world);
         entityRenderer = new EntityRenderer();
         entityRenderer.init();
         redstoneSystem = new RedstoneSystem();
@@ -698,6 +708,7 @@ public class GameLoop {
         entityRenderer = null;
         if (redstoneSystem != null) redstoneSystem.clear();
         redstoneSystem = null;
+        fluidSimulator = null;
         currentHit = null;
         currentWorldFolder = null;
         gameInitialized = false;
@@ -803,10 +814,10 @@ public class GameLoop {
         }
 
         // Handle slider dragging (continuous while mouse held)
-        if (Input.isLeftMouseHeld() && worldCreationScreen.isDraggingSlider()) {
+        if (Input.isLeftMouseDown() && worldCreationScreen.isDraggingSlider()) {
             worldCreationScreen.handleMouseDrag(mx, my, w, h);
         }
-        if (!Input.isLeftMouseHeld()) {
+        if (!Input.isLeftMouseDown()) {
             worldCreationScreen.handleMouseRelease();
         }
 
@@ -970,6 +981,34 @@ public class GameLoop {
             while (furnaceTickTimer >= FURNACE_TICK_INTERVAL) {
                 furnaceTickTimer -= FURNACE_TICK_INTERVAL;
                 furnaceManager.tickAll();
+            }
+        }
+
+        // Tick fluid simulation (water/lava flow)
+        if (fluidSimulator != null) {
+            fluidTickTimer += dt;
+            while (fluidTickTimer >= FLUID_TICK_INTERVAL) {
+                fluidTickTimer -= FLUID_TICK_INTERVAL;
+                fluidSimulator.tick();
+            }
+            // Process fluid-related mesh rebuilds
+            Set<ChunkPos> fluidDirty = fluidSimulator.drainDirtyChunks();
+            if (!fluidDirty.isEmpty()) {
+                chunkManager.rebuildChunks(fluidDirty);
+            }
+            // Process fluid-related light updates (lava placement/removal)
+            java.util.List<long[]> lightUpdates = fluidSimulator.drainLightUpdates();
+            for (long[] lu : lightUpdates) {
+                int lx = (int) lu[0], ly = (int) lu[1], lz = (int) lu[2];
+                int blockId = world.getBlock(lx, ly, lz);
+                int emission = Blocks.getLightEmission(blockId);
+                if (emission > 0) {
+                    propagateBlockLight(lx, ly, lz, emission);
+                } else {
+                    // Lava was removed — remove its light
+                    Set<ChunkPos> lightAffected = Lighting.onLightSourceRemoved(world, lx, ly, lz, 15);
+                    chunkManager.rebuildChunks(lightAffected);
+                }
             }
         }
 
@@ -1385,6 +1424,19 @@ public class GameLoop {
                                 chunkManager.rebuildChunks(rsAffected);
                             }
 
+                            // Notify fluid simulator (placed block may dam or divert fluids)
+                            if (fluidSimulator != null) {
+                                fluidSimulator.notifyBlockChange(px, py, pz);
+                                // If placing a fluid source, trigger immediate spread
+                                if (Blocks.isFluidSource(placedBlockId)) {
+                                    fluidSimulator.scheduleUpdate(px, py, pz, 1);
+                                }
+                                // If placed lava, propagate light
+                                if (Blocks.isLava(placedBlockId)) {
+                                    propagateBlockLight(px, py, pz, Blocks.getLightEmission(placedBlockId));
+                                }
+                            }
+
                             if (agentUse && agentActionQueue != null) {
                                 agentActionQueue.setLastResult(new ActionQueue.ActionResult(
                                     "action_use", true, Blocks.get(placedBlockId).name(), px, py, pz));
@@ -1494,6 +1546,11 @@ public class GameLoop {
             if (dropId > 0) {
                 itemEntityManager.spawnDrop(dropId, 1, bx, by, bz);
             }
+        }
+
+        // Notify fluid simulator — nearby fluids may need to flow into the gap
+        if (fluidSimulator != null) {
+            fluidSimulator.notifyBlockChange(bx, by, bz);
         }
     }
 

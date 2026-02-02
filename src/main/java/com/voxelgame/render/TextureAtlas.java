@@ -108,6 +108,7 @@ public class TextureAtlas {
             case 45 -> generateRedstoneOre(pixels, baseX, baseY);
             case 46 -> generateLava(pixels, baseX, baseY);
             case 47 -> generateObsidian(pixels, baseX, baseY);
+            case 48 -> generateFeather(pixels, baseX, baseY);
         }
     }
 
@@ -817,6 +818,40 @@ public class TextureAtlas {
                     b = clamp(30 + noise / 2);
                 }
                 setPixel(buf, bx + x, by + y, r, g, b, 255);
+            }
+    }
+
+    // Feather item (Infdev 611 zombie drop) — white-gray feather shape
+    private void generateFeather(ByteBuffer buf, int bx, int by) {
+        for (int y = 0; y < TILE_SIZE; y++)
+            for (int x = 0; x < TILE_SIZE; x++) {
+                int noise = (hash(x, y) & 7) - 4;
+
+                // Feather shape: quill running diagonally with barbs
+                // Quill line: from (4,14) to (12,2)
+                float qx = 4 + (12 - 4) * (14 - y) / 12.0f;
+                float distToQuill = Math.abs(x - qx);
+
+                // Barb area: within 3 pixels of quill
+                boolean isBarb = distToQuill < 3.5f && y >= 2 && y <= 14;
+                // Quill (center line): within 0.7 pixels of line
+                boolean isQuill = distToQuill < 0.8f && y >= 2 && y <= 15;
+                // Tip of feather
+                boolean isTip = y <= 3 && distToQuill < 1.5f;
+
+                if (isQuill) {
+                    // Quill: darker gray
+                    setPixel(buf, bx + x, by + y,
+                        clamp(160 + noise), clamp(155 + noise), clamp(140 + noise), 255);
+                } else if (isBarb || isTip) {
+                    // Barbs: white-gray, lighter near edges
+                    int edgeFade = (int)(distToQuill * 8);
+                    setPixel(buf, bx + x, by + y,
+                        clamp(230 + noise + edgeFade), clamp(228 + noise + edgeFade),
+                        clamp(220 + noise + edgeFade), clamp(255 - edgeFade * 15));
+                } else {
+                    setPixel(buf, bx + x, by + y, 0, 0, 0, 0);
+                }
             }
     }
 

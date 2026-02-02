@@ -521,7 +521,7 @@ public class Lighting {
 
     /** Get light reduction for transparent blocks. Water and leaves reduce light. */
     private static int getLightReduction(Block block) {
-        if (block.id() == Blocks.WATER.id()) return 2;
+        if (Blocks.isWater(block.id())) return 2;
         if (block.id() == Blocks.LEAVES.id()) return 1;
         return 0;
     }

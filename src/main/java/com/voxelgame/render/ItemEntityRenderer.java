@@ -69,6 +69,23 @@ public class ItemEntityRenderer {
         {0.70f, 0.15f, 0.10f},     // 51 REDSTONE_TORCH
         {0.60f, 0.15f, 0.10f},     // 52 REDSTONE_REPEATER
         {0.50f, 0.35f, 0.35f},     // 53 REDSTONE_ORE
+        {0.12f, 0.31f, 0.78f},     // 54 FLOWING_WATER_1
+        {0.12f, 0.31f, 0.78f},     // 55 FLOWING_WATER_2
+        {0.12f, 0.31f, 0.78f},     // 56 FLOWING_WATER_3
+        {0.12f, 0.31f, 0.78f},     // 57 FLOWING_WATER_4
+        {0.12f, 0.31f, 0.78f},     // 58 FLOWING_WATER_5
+        {0.12f, 0.31f, 0.78f},     // 59 FLOWING_WATER_6
+        {0.12f, 0.31f, 0.78f},     // 60 FLOWING_WATER_7
+        {0.90f, 0.45f, 0.10f},     // 61 LAVA
+        {0.90f, 0.45f, 0.10f},     // 62 FLOWING_LAVA_1
+        {0.90f, 0.45f, 0.10f},     // 63 FLOWING_LAVA_2
+        {0.90f, 0.45f, 0.10f},     // 64 FLOWING_LAVA_3
+        {0.90f, 0.45f, 0.10f},     // 65 FLOWING_LAVA_4
+        {0.90f, 0.45f, 0.10f},     // 66 FLOWING_LAVA_5
+        {0.90f, 0.45f, 0.10f},     // 67 FLOWING_LAVA_6
+        {0.90f, 0.45f, 0.10f},     // 68 FLOWING_LAVA_7
+        {0.10f, 0.05f, 0.15f},     // 69 OBSIDIAN
+        {0.90f, 0.90f, 0.88f},     // 70 FEATHER
     };
 
     private Shader shader;

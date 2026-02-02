@@ -41,6 +41,16 @@ public class Physics {
     /** Drowning damage per second when out of oxygen. */
     private static final float DROWNING_DAMAGE_PER_SECOND = 2.0f;
 
+    // ---- Lava constants ----
+    /** Speed multiplier when in lava. */
+    public static final float LAVA_SPEED_MULTIPLIER = 0.3f;
+    /** Gravity when in lava (very slow sinking). */
+    private static final float LAVA_GRAVITY = 4.0f;
+    /** Terminal velocity in lava. */
+    private static final float LAVA_TERMINAL_VELOCITY = 4.0f;
+    /** Lava damage per second. */
+    private static final float LAVA_DAMAGE_PER_SECOND = 4.0f;
+
     private World world;
 
     public void setWorld(World world) {
@@ -48,7 +58,7 @@ public class Physics {
     }
 
     /**
-     * Check if a position is inside a water block.
+     * Check if a position is inside a water block (source or flowing).
      */
     public boolean isInWater(float x, float y, float z) {
         if (world == null) return false;
@@ -56,7 +66,19 @@ public class Physics {
         int by = (int) Math.floor(y);
         int bz = (int) Math.floor(z);
         if (by < 0 || by >= WorldConstants.WORLD_HEIGHT) return false;
-        return world.getBlock(bx, by, bz) == Blocks.WATER.id();
+        return Blocks.isWater(world.getBlock(bx, by, bz));
+    }
+
+    /**
+     * Check if a position is inside a lava block (source or flowing).
+     */
+    public boolean isInLava(float x, float y, float z) {
+        if (world == null) return false;
+        int bx = (int) Math.floor(x);
+        int by = (int) Math.floor(y);
+        int bz = (int) Math.floor(z);
+        if (by < 0 || by >= WorldConstants.WORLD_HEIGHT) return false;
+        return Blocks.isLava(world.getBlock(bx, by, bz));
     }
 
     /**
@@ -78,6 +100,7 @@ public class Physics {
         if (player.isFlyMode()) {
             player.resetFallTracking();
             player.setInWater(false);
+            player.setInLava(false);
             return;
         }
 
@@ -85,46 +108,60 @@ public class Physics {
         Vector3f vel = player.getVelocity();
 
         // ---- Water detection ----
-        // Check if player's feet or body is in water
         boolean feetInWater = isInWater(pos.x, pos.y - Player.EYE_HEIGHT + 0.1f, pos.z);
         boolean headInWater = isInWater(pos.x, pos.y, pos.z);
         boolean bodyInWater = feetInWater || isInWater(pos.x, pos.y - Player.EYE_HEIGHT + 0.9f, pos.z);
         player.setInWater(bodyInWater);
         player.setHeadUnderwater(headInWater);
 
+        // ---- Lava detection ----
+        boolean feetInLava = isInLava(pos.x, pos.y - Player.EYE_HEIGHT + 0.1f, pos.z);
+        boolean bodyInLava = feetInLava || isInLava(pos.x, pos.y - Player.EYE_HEIGHT + 0.9f, pos.z);
+        player.setInLava(bodyInLava);
+
         // ---- Oxygen / Drowning ----
         if (headInWater) {
-            // Drain oxygen
             player.drainOxygen(dt);
             if (player.getOxygen() <= 0) {
-                // Drowning damage
                 player.damage(DROWNING_DAMAGE_PER_SECOND * dt, DamageSource.DROWNING);
             }
         } else {
-            // Refill oxygen instantly when head is above water
             player.refillOxygen();
+        }
+
+        // ---- Lava damage ----
+        if (bodyInLava) {
+            player.damage(LAVA_DAMAGE_PER_SECOND * dt, DamageSource.LAVA);
         }
 
         // Record pre-step ground state for fall detection
         boolean wasOnGround = player.isOnGround();
 
-        if (bodyInWater) {
-            // ---- Water physics ----
-            // Reduced gravity (buoyancy)
-            vel.y -= WATER_GRAVITY * dt;
+        if (bodyInLava) {
+            // ---- Lava physics: very slow movement ----
+            vel.y -= LAVA_GRAVITY * dt;
+            if (vel.y < -LAVA_TERMINAL_VELOCITY) {
+                vel.y = -LAVA_TERMINAL_VELOCITY;
+            }
+            vel.x *= (1.0f - 5.0f * dt);
+            vel.z *= (1.0f - 5.0f * dt);
 
-            // Clamp sink speed
+            // Lava breaks fall
+            if (player.isTrackingFall()) {
+                player.landAndGetFallDistance(feetY);
+            }
+        } else if (bodyInWater) {
+            // ---- Water physics ----
+            vel.y -= WATER_GRAVITY * dt;
             if (vel.y < -WATER_TERMINAL_VELOCITY) {
                 vel.y = -WATER_TERMINAL_VELOCITY;
             }
-
-            // Water friction on horizontal movement
             vel.x *= (1.0f - 3.0f * dt);
             vel.z *= (1.0f - 3.0f * dt);
 
             // Reset fall tracking when in water (water breaks fall)
             if (player.isTrackingFall()) {
-                player.landAndGetFallDistance(feetY); // Reset without damage
+                player.landAndGetFallDistance(feetY);
             }
         } else {
             // ---- Normal physics ----

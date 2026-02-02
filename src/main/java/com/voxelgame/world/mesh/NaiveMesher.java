@@ -337,7 +337,15 @@ public class NaiveMesher implements Mesher {
                         for (int v = 0; v < 4; v++) {
                             float u = (fuv[v][0] == 0) ? uv[0] : uv[2];
                             float vCoord = (fuv[v][1] == 0) ? uv[1] : uv[3];
-                            addVertex(verts, wx + fv[v][0], wy + fv[v][1], wz + fv[v][2],
+
+                            // Fluid vertex adjustment: lower Y for vertices at top of block
+                            float vyOff = fv[v][1];
+                            if (isFluid && vyOff > 0.5f) {
+                                // This vertex is at the top — lower it
+                                vyOff = fluidTopY;
+                            }
+
+                            addVertex(verts, wx + fv[v][0], wy + vyOff, wz + fv[v][2],
                                      u, vCoord, vertSkyLight[v], vertBlockLight[v]);
                         }
                         if (isTransparent) {
