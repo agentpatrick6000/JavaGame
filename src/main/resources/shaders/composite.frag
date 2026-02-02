@@ -25,6 +25,9 @@ void main() {
         float ao = texture(uSSAO, vTexCoord).r;
         // Subtle power curve to make occlusion more visible without crushing
         ao = pow(ao, 1.3);
+        // Safety floor: never let SSAO crush below 40% brightness.
+        // Prevents total blackout from bad normals or edge cases.
+        ao = max(ao, 0.4);
         sceneColor *= ao;
     }
 

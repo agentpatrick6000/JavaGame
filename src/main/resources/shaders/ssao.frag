@@ -29,8 +29,16 @@ vec3 viewPosFromDepth(vec2 uv) {
 void main() {
     // Get view-space position and normal for this fragment
     vec3 fragPos = viewPosFromDepth(vTexCoord);
-    vec3 normal = texture(uNormalTex, vTexCoord).rgb * 2.0 - 1.0; // decode from [0,1]
-    normal = normalize(normal);
+    vec3 rawNormal = texture(uNormalTex, vTexCoord).rgb * 2.0 - 1.0; // decode from [0,1]
+
+    // Guard against degenerate normals (zero-length = no normal data written)
+    float normalLen = length(rawNormal);
+    if (normalLen < 0.01) {
+        // No valid normal — assume unoccluded (safe fallback)
+        fragOcclusion = 1.0;
+        return;
+    }
+    vec3 normal = rawNormal / normalLen; // safe normalize
 
     // Random rotation from noise texture (tiled across screen)
     vec3 randomVec = texture(uNoiseTex, vTexCoord * uNoiseScale).rgb;

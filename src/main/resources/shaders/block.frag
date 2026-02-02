@@ -10,10 +10,8 @@ uniform float uAlpha;         // 1.0 for opaque pass, <1.0 for transparent pass
 uniform float uSunBrightness; // 0.0 = midnight, 1.0 = noon
 uniform vec3 uFogColor;       // sky/fog color (matches clear color)
 
-out vec4 fragColor;
-// NOTE: MRT normal output (layout location=1) removed — requires FBO with
-// multiple color attachments. Writing to location 1 on the default framebuffer
-// causes SIGABRT on macOS. Re-enable when PostFX pipeline is wired in.
+layout(location = 0) out vec4 fragColor;
+layout(location = 1) out vec4 fragNormal; // View-space normals for SSAO (PostFX FBO)
 
 // Minimum ambient light so caves aren't pitch black (starlight)
 const float MIN_AMBIENT = 0.02;
@@ -40,4 +38,10 @@ void main() {
     vec3 finalColor = mix(litColor, uFogColor, vFogFactor);
 
     fragColor = vec4(finalColor, texColor.a * uAlpha);
+
+    // Compute view-space normal from screen-space position derivatives.
+    // This gives flat per-face normals for block geometry — exactly what SSAO needs.
+    vec3 viewNormal = normalize(cross(dFdx(vViewPos), dFdy(vViewPos)));
+    // Encode from [-1,1] to [0,1] for texture storage
+    fragNormal = vec4(viewNormal * 0.5 + 0.5, 1.0);
 }
