@@ -67,6 +67,8 @@ public final class ItemRegistry {
         register(Blocks.RED_FLOWER.id(),    "Red Flower",      Category.NATURAL);
         register(Blocks.YELLOW_FLOWER.id(), "Yellow Flower",   Category.NATURAL);
         register(Blocks.WATER.id(),         "Water",           Category.NATURAL);
+        register(Blocks.LAVA.id(),          "Lava",            Category.NATURAL);
+        register(Blocks.OBSIDIAN.id(),      "Obsidian",        Category.NATURAL);
 
         // ---- Ores ----
         register(Blocks.COAL_ORE.id(),      "Coal Ore",        Category.ORES);

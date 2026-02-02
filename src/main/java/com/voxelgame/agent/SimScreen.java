@@ -190,7 +190,8 @@ public class SimScreen {
         if (blockId == 0) return Messages.CellClass.AIR;
 
         // Water
-        if (blockId == Blocks.WATER.id()) return Messages.CellClass.WATER;
+        if (Blocks.isWater(blockId)) return Messages.CellClass.WATER;
+        if (Blocks.isLava(blockId)) return Messages.CellClass.LAVA;
 
         // Foliage (leaves, grass-like)
         if (blockId == Blocks.LEAVES.id()) return Messages.CellClass.FOLIAGE;

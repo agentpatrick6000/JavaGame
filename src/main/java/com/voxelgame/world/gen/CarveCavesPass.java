@@ -40,7 +40,7 @@ public class CarveCavesPass implements GenPipeline.GenerationPass {
                     int currentBlock = chunk.getBlock(lx, y, lz);
                     if (currentBlock == Blocks.AIR.id() ||
                         currentBlock == Blocks.BEDROCK.id() ||
-                        currentBlock == Blocks.WATER.id()) {
+                        Blocks.isWater(currentBlock) || Blocks.isLava(currentBlock)) {
                         continue;
                     }
 
@@ -100,7 +100,7 @@ public class CarveCavesPass implements GenPipeline.GenerationPass {
                         // Don't carve if there's water above (prevents draining oceans)
                         if (y < WorldConstants.SEA_LEVEL) {
                             int aboveBlock = chunk.getBlock(lx, y + 1, lz);
-                            if (aboveBlock == Blocks.WATER.id()) continue;
+                            if (Blocks.isWater(aboveBlock)) continue;
                         }
                         
                         chunk.setBlock(lx, y, lz, Blocks.AIR.id());
@@ -117,7 +117,7 @@ public class CarveCavesPass implements GenPipeline.GenerationPass {
     private int findSurfaceHeight(Chunk chunk, int lx, int lz) {
         for (int y = WorldConstants.WORLD_HEIGHT - 1; y >= 0; y--) {
             int block = chunk.getBlock(lx, y, lz);
-            if (block != Blocks.AIR.id() && block != Blocks.WATER.id()) {
+            if (block != Blocks.AIR.id() && !Blocks.isFluid(block)) {
                 return y;
             }
         }

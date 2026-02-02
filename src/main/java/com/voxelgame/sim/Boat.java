@@ -49,11 +49,11 @@ public class Boat extends Entity {
         int bz = (int) Math.floor(z);
         int blockBelow = (by >= 0 && by < WorldConstants.WORLD_HEIGHT) ? world.getBlock(bx, by, bz) : 0;
         int blockAt = (by >= 0 && by < WorldConstants.WORLD_HEIGHT) ? world.getBlock(bx, by, bz) : 0;
-        onWater = (blockBelow == Blocks.WATER.id() || blockAt == Blocks.WATER.id());
+        onWater = (Blocks.isWater(blockBelow) || Blocks.isWater(blockAt));
 
         // Check water one block below too
         if (!onWater && by - 1 >= 0) {
-            onWater = world.getBlock(bx, by - 1, bz) == Blocks.WATER.id();
+            onWater = Blocks.isWater(world.getBlock(bx, by - 1, bz));
         }
 
         if (mounted) {
@@ -145,7 +145,7 @@ public class Boat extends Entity {
 
         // Search upward for the top of water
         for (int sy = surfaceY; sy < WorldConstants.WORLD_HEIGHT; sy++) {
-            if (world.getBlock(bx, sy, bz) != Blocks.WATER.id()) {
+            if (!Blocks.isWater(world.getBlock(bx, sy, bz))) {
                 return sy - 1;
             }
         }
