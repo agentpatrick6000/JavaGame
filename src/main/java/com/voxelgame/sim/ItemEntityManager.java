@@ -96,6 +96,42 @@ public class ItemEntityManager {
         return items.size();
     }
 
+    /**
+     * Drop item(s) from a player in the direction they're looking.
+     * Spawns an ItemEntity at the player's eye position with forward velocity.
+     *
+     * @param player    the player dropping the item
+     * @param blockId   block/item type to drop
+     * @param count     number of items
+     * @param durability durability (-1 for non-tools)
+     * @param maxDurability max durability (-1 for non-tools)
+     */
+    public void dropFromPlayer(Player player, int blockId, int count, int durability, int maxDurability) {
+        if (blockId <= 0 || count <= 0) return;
+
+        if (items.size() >= MAX_ITEMS) {
+            items.remove(0);
+        }
+
+        float px = player.getPosition().x;
+        float py = player.getPosition().y;
+        float pz = player.getPosition().z;
+
+        ItemEntity item = new ItemEntity(blockId, count, px, py, pz);
+        if (durability >= 0) {
+            item.setDurability(durability, maxDurability);
+        }
+
+        // Override velocity to throw forward in player's look direction
+        org.joml.Vector3f front = player.getCamera().getFront();
+        item.setVelocity(front.x * 5.0f, front.y * 5.0f + 2.0f, front.z * 5.0f);
+
+        items.add(item);
+
+        System.out.printf("[ItemDrop] Player dropped %s x%d%n",
+            Blocks.get(blockId).name(), count);
+    }
+
     /** Clear all items (e.g., on world unload). */
     public void clear() {
         items.clear();

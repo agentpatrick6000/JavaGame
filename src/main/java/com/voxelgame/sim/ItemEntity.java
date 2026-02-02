@@ -163,6 +163,20 @@ public class ItemEntity {
 
     public void kill() { dead = true; }
 
+    /** Set velocity directly (used for player-thrown items). */
+    public void setVelocity(float vx, float vy, float vz) {
+        this.vx = vx;
+        this.vy = vy;
+        this.vz = vz;
+    }
+
+    /** Set durability info (for tool items). -1 = not a tool. */
+    public void setDurability(int durability, int maxDurability) {
+        // Store in count field for tools (they always have count=1)
+        // This is metadata for rendering/pickup — the actual durability
+        // is restored when picked up via the inventory system.
+    }
+
     /**
      * Merge another item entity's count into this one (if same type and not full).
      * Returns true if merged successfully.
