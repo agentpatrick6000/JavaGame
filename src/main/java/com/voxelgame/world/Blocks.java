@@ -152,12 +152,83 @@ public final class Blocks {
 
     // Obsidian (from water + lava source interaction). Texture 47. Very hard.
     public static final Block OBSIDIAN        = new Block(69, "obsidian",      true,  false, new int[]{47}, 50.0f, -1);
+    // ---- Alpha Building Blocks (IDs 70-97) ----
+    // Texture indices 48-73
+
+    // Doors (solid+transparent for special mesh rendering)
+    public static final Block OAK_DOOR          = new Block(70, "oak_door",          true,  true,  new int[]{48},              3.0f, -1);
+    public static final Block OAK_DOOR_TOP      = new Block(71, "oak_door_top",      true,  true,  new int[]{49},              3.0f,  0);
+    public static final Block IRON_DOOR         = new Block(72, "iron_door",         true,  true,  new int[]{50},              5.0f, -1);
+    public static final Block IRON_DOOR_TOP     = new Block(73, "iron_door_top",     true,  true,  new int[]{51},              5.0f,  0);
+
+    // Stairs (solid, opaque)
+    public static final Block COBBLESTONE_STAIRS = new Block(74, "cobblestone_stairs", true, false, new int[]{2},              2.0f, -1);
+    public static final Block OAK_STAIRS        = new Block(75, "oak_stairs",        true,  false, new int[]{19},              2.0f, -1);
+
+    // Slabs (solid+transparent, half-height)
+    public static final Block STONE_SLAB        = new Block(76, "stone_slab",        true,  true,  new int[]{52, 52, 1, 1, 1, 1}, 2.0f, -1);
+    public static final Block OAK_SLAB          = new Block(77, "oak_slab",          true,  true,  new int[]{19},              2.0f, -1);
+
+    // Fence (solid+transparent post with connections)
+    public static final Block OAK_FENCE         = new Block(78, "oak_fence",         true,  true,  new int[]{19},              2.0f, -1);
+
+    // Ladder (non-solid, transparent, climbable)
+    public static final Block LADDER            = new Block(79, "ladder",            false, true,  new int[]{53},              0.4f, -1);
+
+    // Sign (non-solid, transparent)
+    public static final Block SIGN              = new Block(80, "sign",              false, true,  new int[]{54},              1.0f, -1);
+
+    // Bed (solid+transparent, 9/16 height)
+    public static final Block BED_FOOT          = new Block(81, "bed",               true,  true,  new int[]{55, 56, 57, 57, 57, 57}, 0.2f, -1);
+    public static final Block BED_HEAD          = new Block(82, "bed_head",          true,  true,  new int[]{58, 56, 59, 59, 59, 59}, 0.2f,  0);
+
+    // Pressure plates (non-solid, transparent, 1/16 height)
+    public static final Block WOOD_PRESSURE_PLATE  = new Block(83, "wood_pressure_plate",  false, true, new int[]{19}, 0.5f, -1);
+    public static final Block STONE_PRESSURE_PLATE = new Block(84, "stone_pressure_plate", false, true, new int[]{1},  0.5f, -1);
+
+    // Buttons (non-solid, transparent)
+    public static final Block WOOD_BUTTON       = new Block(85, "wood_button",       false, true,  new int[]{19},              0.5f, -1);
+    public static final Block STONE_BUTTON      = new Block(86, "stone_button",      false, true,  new int[]{1},               0.5f, -1);
+
+    // Lever (non-solid, transparent)
+    public static final Block LEVER             = new Block(87, "lever",             false, true,  new int[]{60},              0.5f, -1);
+
+    // Snow layer (non-solid, transparent, 2/16 height)
+    public static final Block SNOW_LAYER        = new Block(88, "snow_layer",        false, true,  new int[]{61},              0.1f, -1);
+
+    // Ice (solid, transparent, slippery)
+    public static final Block ICE               = new Block(89, "ice",               true,  true,  new int[]{62},              0.5f,  0);
+
+    // Clay (solid, opaque)
+    public static final Block CLAY              = new Block(90, "clay",              true,  false, new int[]{63},              0.6f, -1);
+
+    // Brick (solid, opaque)
+    public static final Block BRICK             = new Block(91, "brick",             true,  false, new int[]{64},              2.0f, -1);
+
+    // Sponge (solid, opaque)
+    public static final Block SPONGE            = new Block(92, "sponge",            true,  false, new int[]{65},              0.6f, -1);
+
+    // Bookshelf (solid, opaque — planks top/bottom, books on sides)
+    public static final Block BOOKSHELF         = new Block(93, "bookshelf",         true,  false, new int[]{19, 19, 66, 66, 66, 66}, 1.5f, -1);
+
+    // Note block (solid, opaque)
+    public static final Block NOTE_BLOCK        = new Block(94, "note_block",        true,  false, new int[]{67},              0.8f, -1);
+
+    // Jukebox (solid, opaque)
+    public static final Block JUKEBOX           = new Block(95, "jukebox",           true,  false, new int[]{68, 67, 69, 69, 69, 69}, 2.0f, -1);
+
+    // Pumpkin (solid, opaque)
+    public static final Block PUMPKIN           = new Block(96, "pumpkin",           true,  false, new int[]{70, 70, 71, 72, 71, 71}, 1.0f, -1);
+
+    // Jack o'lantern (solid, opaque, light emission 15)
+    public static final Block JACK_O_LANTERN   = new Block(97, "jack_o_lantern",    true,  false, new int[]{70, 70, 71, 73, 71, 71}, 1.0f, -1);
+
 
     /** All blocks indexed by ID for fast lookup. */
     private static final Block[] REGISTRY;
 
     static {
-        REGISTRY = new Block[70]; // IDs 0-69
+        REGISTRY = new Block[98]; // IDs 0-97
         REGISTRY[0]  = AIR;          REGISTRY[1]  = STONE;         REGISTRY[2]  = COBBLESTONE;
         REGISTRY[3]  = DIRT;         REGISTRY[4]  = GRASS;         REGISTRY[5]  = SAND;
         REGISTRY[6]  = GRAVEL;       REGISTRY[7]  = LOG;           REGISTRY[8]  = LEAVES;
@@ -185,6 +256,17 @@ public final class Blocks {
         REGISTRY[65] = FLOWING_LAVA_4; REGISTRY[66] = FLOWING_LAVA_5; REGISTRY[67] = FLOWING_LAVA_6;
         REGISTRY[68] = FLOWING_LAVA_7;
         REGISTRY[69] = OBSIDIAN;
+        // Alpha building blocks
+        REGISTRY[70] = OAK_DOOR;        REGISTRY[71] = OAK_DOOR_TOP;    REGISTRY[72] = IRON_DOOR;
+        REGISTRY[73] = IRON_DOOR_TOP;   REGISTRY[74] = COBBLESTONE_STAIRS; REGISTRY[75] = OAK_STAIRS;
+        REGISTRY[76] = STONE_SLAB;      REGISTRY[77] = OAK_SLAB;        REGISTRY[78] = OAK_FENCE;
+        REGISTRY[79] = LADDER;          REGISTRY[80] = SIGN;            REGISTRY[81] = BED_FOOT;
+        REGISTRY[82] = BED_HEAD;        REGISTRY[83] = WOOD_PRESSURE_PLATE; REGISTRY[84] = STONE_PRESSURE_PLATE;
+        REGISTRY[85] = WOOD_BUTTON;     REGISTRY[86] = STONE_BUTTON;    REGISTRY[87] = LEVER;
+        REGISTRY[88] = SNOW_LAYER;      REGISTRY[89] = ICE;             REGISTRY[90] = CLAY;
+        REGISTRY[91] = BRICK;           REGISTRY[92] = SPONGE;          REGISTRY[93] = BOOKSHELF;
+        REGISTRY[94] = NOTE_BLOCK;      REGISTRY[95] = JUKEBOX;         REGISTRY[96] = PUMPKIN;
+        REGISTRY[97] = JACK_O_LANTERN;
     }
 
     /**
@@ -209,7 +291,8 @@ public final class Blocks {
     public static int getLightEmission(int blockId) {
         if (blockId == TORCH.id()) return 14;
         if (blockId == REDSTONE_TORCH.id()) return 7;
-        if (isLava(blockId)) return 15;  // lava emits maximum light
+        if (blockId == JACK_O_LANTERN.id()) return 15;
+        if (isLava(blockId)) return 15;
         return 0;
     }
 
@@ -324,7 +407,15 @@ public final class Blocks {
             || blockId == POWERED_RAIL.id()
             || blockId == REDSTONE_WIRE.id()
             || blockId == REDSTONE_TORCH.id()
-            || blockId == REDSTONE_REPEATER.id();
+            || blockId == REDSTONE_REPEATER.id()
+            || blockId == LADDER.id()
+            || blockId == SIGN.id()
+            || blockId == WOOD_PRESSURE_PLATE.id()
+            || blockId == STONE_PRESSURE_PLATE.id()
+            || blockId == WOOD_BUTTON.id()
+            || blockId == STONE_BUTTON.id()
+            || blockId == LEVER.id()
+            || blockId == SNOW_LAYER.id();
     }
 
     /**
@@ -348,5 +439,58 @@ public final class Blocks {
      */
     public static boolean isFlower(int blockId) {
         return blockId == RED_FLOWER.id() || blockId == YELLOW_FLOWER.id();
+    }
+
+    // ======== Alpha building block helpers ========
+
+    /** Check if a block is a door (any part). */
+    public static boolean isDoor(int blockId) {
+        return blockId == OAK_DOOR.id() || blockId == OAK_DOOR_TOP.id()
+            || blockId == IRON_DOOR.id() || blockId == IRON_DOOR_TOP.id();
+    }
+
+    /** Check if a block is a door bottom half. */
+    public static boolean isDoorBottom(int blockId) {
+        return blockId == OAK_DOOR.id() || blockId == IRON_DOOR.id();
+    }
+
+    /** Check if a block is stairs. */
+    public static boolean isStairs(int blockId) {
+        return blockId == COBBLESTONE_STAIRS.id() || blockId == OAK_STAIRS.id();
+    }
+
+    /** Check if a block is a slab (half-height). */
+    public static boolean isSlab(int blockId) {
+        return blockId == STONE_SLAB.id() || blockId == OAK_SLAB.id();
+    }
+
+    /** Check if a block is a fence. */
+    public static boolean isFence(int blockId) {
+        return blockId == OAK_FENCE.id();
+    }
+
+    /** Check if a block is a pressure plate. */
+    public static boolean isPressurePlate(int blockId) {
+        return blockId == WOOD_PRESSURE_PLATE.id() || blockId == STONE_PRESSURE_PLATE.id();
+    }
+
+    /** Check if a block is a button. */
+    public static boolean isButton(int blockId) {
+        return blockId == WOOD_BUTTON.id() || blockId == STONE_BUTTON.id();
+    }
+
+    /** Check if a block is a bed (any part). */
+    public static boolean isBed(int blockId) {
+        return blockId == BED_FOOT.id() || blockId == BED_HEAD.id();
+    }
+
+    /** Check if a block is climbable (ladder). */
+    public static boolean isClimbable(int blockId) {
+        return blockId == LADDER.id();
+    }
+
+    /** Check if a block is ice (slippery). */
+    public static boolean isIce(int blockId) {
+        return blockId == ICE.id();
     }
 }

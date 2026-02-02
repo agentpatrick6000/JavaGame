@@ -248,6 +248,15 @@ public class Player {
         float scaled = amount * difficulty.getDamageMultiplier(source);
         if (scaled <= 0) return;
 
+        // Armor damage reduction
+        float totalDefense = inventory.getTotalArmorDefense();
+        if (totalDefense > 0) {
+            float reduction = ArmorItem.calculateDamageReduction(totalDefense);
+            scaled -= scaled * reduction;
+            inventory.damageArmor();
+        }
+        if (scaled <= 0) return;
+
         health -= scaled;
         damageFlashTimer = DAMAGE_FLASH_DURATION;
 

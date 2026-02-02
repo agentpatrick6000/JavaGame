@@ -26,5 +26,8 @@ public enum DamageSource {
     EXPLOSION,
 
     /** Damage from contact with lava. */
-    LAVA
+    LAVA,
+
+    /** Damage from arrow projectile. */
+    ARROW
 }

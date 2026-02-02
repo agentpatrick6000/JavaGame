@@ -1448,9 +1448,18 @@ public class GameLoop {
         }
 
         if (spawnDrops) {
-            int dropId = block.getDrop();
-            if (dropId > 0) {
-                itemEntityManager.spawnDrop(dropId, 1, bx, by, bz);
+            if (blockId == Blocks.GRAVEL.id()) {
+                // 10% chance to drop flint from gravel
+                if (Math.random() < 0.10) {
+                    itemEntityManager.spawnDrop(Blocks.FLINT.id(), 1, bx, by, bz);
+                } else {
+                    itemEntityManager.spawnDrop(Blocks.GRAVEL.id(), 1, bx, by, bz);
+                }
+            } else {
+                int dropId = block.getDrop();
+                if (dropId > 0) {
+                    itemEntityManager.spawnDrop(dropId, 1, bx, by, bz);
+                }
             }
         }
     }

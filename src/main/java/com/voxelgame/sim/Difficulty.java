@@ -43,6 +43,7 @@ public enum Difficulty {
             case DROWNING -> envDamageMultiplier;  // Drowning scales with env damage
             case EXPLOSION -> 1.0f; // Explosion damage doesn't scale
             case LAVA -> envDamageMultiplier; // Lava scales with env damage
+            case ARROW -> mobDamageMultiplier; // Arrow damage scales with mob damage
         };
     }
 
