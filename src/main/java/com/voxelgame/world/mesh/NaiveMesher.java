@@ -232,10 +232,32 @@ public class NaiveMesher implements Mesher {
                     }
 
                     // Special rendering for redstone repeater: flat slab on ground
+                    // Rendered in OPAQUE pass with alpha-discard
                     if (blockId == Blocks.REDSTONE_REPEATER.id()) {
-                        transVertexCount = meshFlatSlab(transVerts, transIndices, transVertexCount,
-                                                         wx, wy, wz, block, atlas);
+                        opaqueVertexCount = meshFlatSlab(opaqueVerts, opaqueIndices, opaqueVertexCount,
+                                                          wx, wy, wz, block, atlas);
                         continue;
+                    }
+
+                    // ---- Fluid rendering: compute lowered top height ----
+                    boolean isFluid = Blocks.isFluid(blockId);
+                    float fluidTopY = 1.0f;
+                    if (isFluid) {
+                        fluidTopY = Blocks.getFluidHeight(blockId);
+                        // If same fluid type is above, render as full height
+                        int aboveId;
+                        if (y + 1 < WorldConstants.WORLD_HEIGHT) {
+                            if (y + 1 < WorldConstants.WORLD_HEIGHT &&
+                                x >= 0 && x < WorldConstants.CHUNK_SIZE &&
+                                z >= 0 && z < WorldConstants.CHUNK_SIZE) {
+                                aboveId = chunk.getBlock(x, y + 1, z);
+                            } else {
+                                aboveId = world.getBlock(cx + x, y + 1, cz + z);
+                            }
+                            boolean sameAbove = (Blocks.isWater(blockId) && Blocks.isWater(aboveId))
+                                             || (Blocks.isLava(blockId) && Blocks.isLava(aboveId));
+                            if (sameAbove) fluidTopY = 1.0f;
+                        }
                     }
 
                     for (int face = 0; face < 6; face++) {
@@ -254,7 +276,25 @@ public class NaiveMesher implements Mesher {
 
                         Block neighbor = Blocks.get(neighborId);
                         if (neighbor.solid() && !neighbor.transparent()) continue;
-                        if (blockId == neighborId && neighbor.transparent()) continue;
+
+                        // Fluid face culling
+                        if (isFluid) {
+                            boolean sameFluidType = (Blocks.isWater(blockId) && Blocks.isWater(neighborId))
+                                                 || (Blocks.isLava(blockId) && Blocks.isLava(neighborId));
+                            if (sameFluidType) {
+                                if (face == 0 || face == 1) {
+                                    // Top/bottom: always skip between stacked same-type fluids
+                                    continue;
+                                } else {
+                                    // Side faces: skip unless neighbor is lower level (gap visible)
+                                    int myLevel = Blocks.getFluidLevel(blockId);
+                                    int nLevel = Blocks.getFluidLevel(neighborId);
+                                    if (nLevel <= myLevel) continue;
+                                }
+                            }
+                        } else {
+                            if (blockId == neighborId && neighbor.transparent()) continue;
+                        }
 
                         int texIdx = block.getTextureIndex(face);
                         float[] uv = atlas.getUV(texIdx);

@@ -153,11 +153,14 @@ public final class Blocks {
     // Obsidian (from water + lava source interaction). Texture 47. Very hard.
     public static final Block OBSIDIAN        = new Block(69, "obsidian",      true,  false, new int[]{47}, 50.0f, -1);
 
+    // Feather (Infdev 611 zombie drop — changed to rotten flesh in Beta 1.8)
+    public static final Block FEATHER         = new Block(70, "feather",       false, true,  new int[]{48},  0.0f, -1);
+
     /** All blocks indexed by ID for fast lookup. */
     private static final Block[] REGISTRY;
 
     static {
-        REGISTRY = new Block[70]; // IDs 0-69
+        REGISTRY = new Block[71]; // IDs 0-70
         REGISTRY[0]  = AIR;          REGISTRY[1]  = STONE;         REGISTRY[2]  = COBBLESTONE;
         REGISTRY[3]  = DIRT;         REGISTRY[4]  = GRASS;         REGISTRY[5]  = SAND;
         REGISTRY[6]  = GRAVEL;       REGISTRY[7]  = LOG;           REGISTRY[8]  = LEAVES;
@@ -185,6 +188,7 @@ public final class Blocks {
         REGISTRY[65] = FLOWING_LAVA_4; REGISTRY[66] = FLOWING_LAVA_5; REGISTRY[67] = FLOWING_LAVA_6;
         REGISTRY[68] = FLOWING_LAVA_7;
         REGISTRY[69] = OBSIDIAN;
+        REGISTRY[70] = FEATHER;
     }
 
     /**

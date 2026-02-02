@@ -58,8 +58,10 @@ import com.voxelgame.world.Lighting;
 import com.voxelgame.world.Raycast;
 import com.voxelgame.world.World;
 import com.voxelgame.world.WorldTime;
+import com.voxelgame.world.gen.GenConfig;
 import com.voxelgame.world.gen.GenPipeline;
 import com.voxelgame.world.gen.SpawnPointFinder;
+import com.voxelgame.world.gen.WorldGenPreset;
 import com.voxelgame.world.stream.ChunkGenerationWorker;
 import com.voxelgame.world.stream.ChunkManager;
 
@@ -239,8 +241,9 @@ public class GameLoop {
         worldCreationScreen.setCallback(new WorldCreationScreen.CreationCallback() {
             @Override
             public void onCreateWorld(String worldName, GameMode gameMode, Difficulty difficulty,
-                                       String seed, boolean showCoordinates, boolean bonusChest) {
-                createAndStartWorld(worldName, gameMode, difficulty, seed);
+                                       String seed, boolean showCoordinates, boolean bonusChest,
+                                       WorldGenPreset preset, GenConfig genConfig) {
+                createAndStartWorld(worldName, gameMode, difficulty, seed, preset, genConfig);
             }
             @Override public void onCancel() { switchToWorldList(); }
         });
@@ -361,9 +364,11 @@ public class GameLoop {
 
     /**
      * Create a brand new world and start playing it.
+     * Supports world generation presets and advanced GenConfig settings.
      */
     private void createAndStartWorld(String displayName, GameMode gameMode,
-                                      Difficulty difficulty, String seedText) {
+                                      Difficulty difficulty, String seedText,
+                                      WorldGenPreset preset, GenConfig genConfig) {
         String folderName = SaveManager.toFolderName(displayName);
 
         // Generate seed
@@ -378,9 +383,17 @@ public class GameLoop {
             seed = System.nanoTime();
         }
 
+        // Store preset/config info for initGameSubsystems
+        pendingPreset = preset;
+        pendingGenConfig = genConfig;
+
         // Initialize game subsystems
         initGameSubsystems(folderName, seed, gameMode, difficulty, displayName, true);
     }
+
+    // Transient state for world creation (used between createAndStartWorld and initGameSubsystems)
+    private WorldGenPreset pendingPreset = null;
+    private GenConfig pendingGenConfig = null;
 
     /**
      * Load an existing world and start playing.
@@ -423,9 +436,23 @@ public class GameLoop {
         player.getCamera().setFarPlane(lodConfig.getFarPlane());
 
         if (isNew) {
-            // Create new world
+            // Create new world — apply preset/config if available
+            GenConfig genConfig = pendingGenConfig;
+            WorldGenPreset preset = pendingPreset;
+            if (genConfig == null) {
+                genConfig = (preset != null) ? preset.createConfig() : GenConfig.defaultConfig();
+            }
+            if (preset != null) {
+                genConfig.presetName = preset.name();
+            }
+
             chunkManager.setSeed(seed);
+            chunkManager.setGenConfig(genConfig);
             chunkManager.init(renderer.getAtlas());
+
+            // Clear pending state
+            pendingPreset = null;
+            pendingGenConfig = null;
 
             // Find spawn point
             GenPipeline pipeline = chunkManager.getPipeline();
@@ -440,10 +467,11 @@ public class GameLoop {
             player.setGameMode(gameMode);
             player.setDifficulty(difficulty);
 
-            // Save initial metadata
+            // Save initial metadata (including preset name)
             try {
                 WorldMeta meta = new WorldMeta(seed);
                 meta.setWorldName(displayName != null ? displayName : "New World");
+                meta.setWorldGenPreset(genConfig.presetName);
                 meta.setPlayerPosition(
                     player.getPosition().x, player.getPosition().y, player.getPosition().z
                 );
@@ -465,7 +493,13 @@ public class GameLoop {
                 WorldMeta meta = saveManager.loadMeta();
                 if (meta != null) {
                     seed = meta.getSeed();
+                    // Restore world gen preset from saved metadata
+                    WorldGenPreset savedPreset = WorldGenPreset.fromString(meta.getWorldGenPreset());
+                    GenConfig savedConfig = savedPreset.createConfig();
+                    savedConfig.presetName = savedPreset.name();
+
                     chunkManager.setSeed(seed);
+                    chunkManager.setGenConfig(savedConfig);
                     chunkManager.init(renderer.getAtlas());
 
                     player.getCamera().getPosition().set(
@@ -766,6 +800,14 @@ public class GameLoop {
         // Handle mouse click
         if (Input.isLeftMouseClicked()) {
             worldCreationScreen.handleClick(mx, my, w, h);
+        }
+
+        // Handle slider dragging (continuous while mouse held)
+        if (Input.isLeftMouseHeld() && worldCreationScreen.isDraggingSlider()) {
+            worldCreationScreen.handleMouseDrag(mx, my, w, h);
+        }
+        if (!Input.isLeftMouseHeld()) {
+            worldCreationScreen.handleMouseRelease();
         }
 
         // Handle character input for text fields

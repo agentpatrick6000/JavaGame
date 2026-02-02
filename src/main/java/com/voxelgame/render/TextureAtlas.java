@@ -15,7 +15,7 @@ public class TextureAtlas {
 
     private static final int TILE_SIZE = 16;
     private static final int TILES_PER_ROW = 8;
-    private static final int TILE_COUNT = 48; // 0-47 (includes fluids: 46=lava, 47=obsidian)
+    private static final int TILE_COUNT = 49; // 0-48 (includes fluids: 46=lava, 47=obsidian, 48=feather)
     private static final int ATLAS_WIDTH = TILES_PER_ROW * TILE_SIZE;  // 128
     private static final int ATLAS_HEIGHT = ((TILE_COUNT + TILES_PER_ROW - 1) / TILES_PER_ROW) * TILE_SIZE;
 
