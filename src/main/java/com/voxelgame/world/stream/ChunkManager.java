@@ -159,9 +159,14 @@ public class ChunkManager {
     /**
      * Update LOD levels for all loaded chunks based on distance to player.
      * Triggers LOD mesh rebuilding when a chunk's LOD level changes.
+     *
+     * Uses a hysteresis buffer (2 chunks) to prevent LOD flickering
+     * when the player is near a boundary.
      */
     private void updateLODLevels(int pcx, int pcz) {
         int l0 = 0, l1 = 0, l2 = 0, l3 = 0;
+        int meshJobsSubmitted = 0;
+        int maxMeshJobsPerUpdate = 8; // Don't overwhelm the mesh pool
 
         for (var entry : world.getChunkMap().entrySet()) {
             ChunkPos pos = entry.getKey();
@@ -174,6 +179,17 @@ public class ChunkManager {
             LODLevel newLOD = lodConfig.getLevelForDistance(distSq);
             LODLevel oldLOD = chunk.getCurrentLOD();
 
+            // Hysteresis: only upgrade (increase detail) at boundary - 2 chunks,
+            // only downgrade (decrease detail) at boundary + 2 chunks.
+            // This prevents flickering when walking along a LOD boundary.
+            if (newLOD.level() < oldLOD.level()) {
+                // Upgrading — require 2 chunks past the boundary
+                LODLevel checkLOD = lodConfig.getLevelForDistance(distSq + 4);
+                if (checkLOD.level() >= oldLOD.level()) {
+                    newLOD = oldLOD; // Not far enough past boundary yet
+                }
+            }
+
             // Count stats
             switch (newLOD) {
                 case LOD_0 -> l0++;
@@ -184,15 +200,23 @@ public class ChunkManager {
 
             if (newLOD != oldLOD) {
                 chunk.setCurrentLOD(newLOD);
-                chunk.setLodMeshReady(false);
+
+                if (meshJobsSubmitted >= maxMeshJobsPerUpdate) continue;
 
                 // If upgrading to LOD 0 and no full mesh, rebuild it
                 if (newLOD == LODLevel.LOD_0 && (chunk.getMesh() == null || chunk.getMesh().isEmpty())) {
+                    // Also compute lighting if missing
+                    if (chunk.isLightDirty()) {
+                        Lighting.computeInitialSkyLight(chunk, world);
+                        Lighting.computeInitialBlockLight(chunk, world);
+                    }
                     submitMeshJob(chunk, pos, false);
+                    meshJobsSubmitted++;
                 }
-                // If downgrading, generate LOD mesh
+                // If downgrading, check if LOD mesh already cached
                 else if (newLOD.level() > 0 && chunk.getLodMesh(newLOD.level()) == null) {
                     submitLODMeshJob(chunk, pos, newLOD);
+                    meshJobsSubmitted++;
                 } else {
                     chunk.setLodMeshReady(true);
                 }
