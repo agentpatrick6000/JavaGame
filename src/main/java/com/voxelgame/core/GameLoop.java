@@ -1580,7 +1580,7 @@ public class GameLoop {
                 if (nBlock.solid() && !nBlock.transparent()) continue;
 
                 int newLevel = level - 1;
-                if (nBlock.id() == Blocks.WATER.id()) newLevel -= 2;
+                if (Blocks.isWater(nBlock.id())) newLevel -= 2;
                 if (newLevel <= 0) continue;
 
                 int current = world.getBlockLight(nx, ny, nz);
