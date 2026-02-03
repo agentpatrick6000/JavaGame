@@ -123,6 +123,7 @@ public final class ItemRegistry {
 
         // ---- Armor ----
         register(Blocks.LEATHER.id(),            "Leather",              Category.MATERIALS);
+        register(Blocks.WOOL.id(),               "Wool",                 Category.MATERIALS);
         register(Blocks.LEATHER_HELMET.id(),     "Leather Helmet",      Category.TOOLS);
         register(Blocks.LEATHER_CHESTPLATE.id(), "Leather Chestplate",  Category.TOOLS);
         register(Blocks.LEATHER_LEGGINGS.id(),   "Leather Leggings",    Category.TOOLS);

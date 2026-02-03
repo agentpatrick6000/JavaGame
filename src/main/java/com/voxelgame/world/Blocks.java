@@ -255,12 +255,13 @@ public final class Blocks {
     public static final Block LEATHER              = new Block(124, "leather", false, true, new int[]{0}, 0.0f, -1);
     public static final Block RAW_BEEF             = new Block(125, "raw_beef", false, true, new int[]{0}, 0.0f, -1);
     public static final Block COOKED_BEEF          = new Block(126, "cooked_beef", false, true, new int[]{0}, 0.0f, -1);
+    public static final Block WOOL                 = new Block(127, "wool", true, false, new int[]{0}, 0.8f, -1);
 
     /** All blocks indexed by ID for fast lookup. */
     private static final Block[] REGISTRY;
 
     static {
-        REGISTRY = new Block[127]; // IDs 0-126
+        REGISTRY = new Block[128]; // IDs 0-127
         REGISTRY[0]  = AIR;          REGISTRY[1]  = STONE;         REGISTRY[2]  = COBBLESTONE;
         REGISTRY[3]  = DIRT;         REGISTRY[4]  = GRASS;         REGISTRY[5]  = SAND;
         REGISTRY[6]  = GRAVEL;       REGISTRY[7]  = LOG;           REGISTRY[8]  = LEAVES;
@@ -328,6 +329,7 @@ public final class Blocks {
         REGISTRY[124] = LEATHER;
         REGISTRY[125] = RAW_BEEF;
         REGISTRY[126] = COOKED_BEEF;
+        REGISTRY[127] = WOOL;
     }
 
     /**

@@ -9,5 +9,6 @@ public enum EntityType {
     BOAT,
     MINECART,
     TNT,
-    COW
+    COW,
+    SHEEP
 }
