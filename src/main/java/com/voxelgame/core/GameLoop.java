@@ -14,6 +14,7 @@ import com.voxelgame.render.Renderer;
 import com.voxelgame.save.SaveManager;
 import com.voxelgame.save.WorldMeta;
 import com.voxelgame.sim.ArmorItem;
+import com.voxelgame.sim.ArrowEntity;
 import com.voxelgame.sim.BlockBreakProgress;
 import com.voxelgame.sim.Boat;
 import com.voxelgame.sim.Chest;
@@ -1254,10 +1255,31 @@ public class GameLoop {
             }
         }
 
+        // ---- Bow & Arrow Combat ----
+        if (player.isBowDrawn() && Input.isCursorLocked()) {
+            if (Input.isRightMouseDown() && player.hasArrows()) {
+                // Start/continue charging bow
+                if (!player.isBowCharging()) {
+                    player.startChargingBow();
+                }
+                player.updateBowCharge(dt);
+            } else if (player.isBowCharging()) {
+                // Released right-click → fire arrow
+                ArrowEntity arrow = player.releaseBow();
+                if (arrow != null) {
+                    entityManager.addEntity(arrow);
+                }
+            }
+        } else if (player.isBowCharging()) {
+            // Switched items or lost cursor lock → cancel charge
+            player.cancelBowCharge();
+        }
+
         // Block Placing / Interaction (Right Click)
+        // Don't place blocks / interact while charging bow
         boolean rightClick = agentUse || (Input.isCursorLocked() && Input.isRightMouseClicked());
 
-        if (rightClick) {
+        if (rightClick && !player.isBowCharging()) {
             // First: check if we right-clicked an entity (boat/minecart)
             Entity hitEntity = entityManager.raycastEntity(
                 player.getCamera().getPosition(), player.getCamera().getFront(), 4.0f);
@@ -1479,6 +1501,12 @@ public class GameLoop {
 
         if (spawnDrops) {
             int dropId = block.getDrop();
+            
+            // Special case: gravel has 10% chance to drop flint instead of itself
+            if (blockId == Blocks.GRAVEL.id() && Math.random() < 0.10) {
+                dropId = Blocks.FLINT.id();
+            }
+            
             if (dropId > 0) {
                 itemEntityManager.spawnDrop(dropId, 1, bx, by, bz);
             }
