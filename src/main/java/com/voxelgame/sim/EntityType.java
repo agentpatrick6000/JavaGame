@@ -10,5 +10,6 @@ public enum EntityType {
     MINECART,
     TNT,
     COW,
-    SHEEP
+    SHEEP,
+    CHICKEN
 }

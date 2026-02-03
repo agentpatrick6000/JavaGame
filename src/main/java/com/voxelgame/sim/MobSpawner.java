@@ -30,10 +30,11 @@ public class MobSpawner {
     private static final float DESPAWN_DIST = 64.0f;
 
     // ---- Max per type ----
-    private static final int MAX_PIGS    = 15;
-    private static final int MAX_COWS    = 12;
-    private static final int MAX_SHEEP   = 12;
-    private static final int MAX_ZOMBIES = 20;
+    private static final int MAX_PIGS     = 15;
+    private static final int MAX_COWS     = 12;
+    private static final int MAX_SHEEP    = 12;
+    private static final int MAX_CHICKENS = 12;
+    private static final int MAX_ZOMBIES  = 20;
 
     // ---- Light thresholds ----
     private static final int HOSTILE_MAX_LIGHT = 7; // zombies spawn in light < 7
@@ -60,20 +61,22 @@ public class MobSpawner {
             despawnFarEntities(player, entityManager);
         }
 
-        // ---- Passive mob spawning (pigs + cows + sheep) ----
+        // ---- Passive mob spawning (pigs + cows + sheep + chickens) ----
         passiveTimer += dt;
         if (passiveTimer >= PASSIVE_SPAWN_INTERVAL) {
             passiveTimer = 0;
 
             if (worldTime.isDay()) {
                 // Random passive mob spawn
-                int choice = random.nextInt(3); // 0=pig, 1=cow, 2=sheep
+                int choice = random.nextInt(4); // 0=pig, 1=cow, 2=sheep, 3=chicken
                 if (choice == 0 && entityManager.countType(EntityType.PIG) < MAX_PIGS) {
                     trySpawnPig(world, player, entityManager);
                 } else if (choice == 1 && entityManager.countType(EntityType.COW) < MAX_COWS) {
                     trySpawnCow(world, player, entityManager);
                 } else if (choice == 2 && entityManager.countType(EntityType.SHEEP) < MAX_SHEEP) {
                     trySpawnSheep(world, player, entityManager);
+                } else if (choice == 3 && entityManager.countType(EntityType.CHICKEN) < MAX_CHICKENS) {
+                    trySpawnChicken(world, player, entityManager);
                 }
             }
         }
@@ -224,6 +227,48 @@ public class MobSpawner {
             Sheep sheep = new Sheep(sx, spawnY, sz);
             entityManager.addEntity(sheep);
             System.out.printf("[Spawn] Sheep spawned at (%.1f, %d, %.1f) light=%d%n", sx, spawnY, sz, maxLight);
+            return;
+        }
+    }
+
+    /**
+     * Attempt to spawn a chicken near the player.
+     * Requires grass block + air above, in bright areas (light >= 7).
+     */
+    private void trySpawnChicken(World world, Player player, EntityManager entityManager) {
+        Vector3f pPos = player.getPosition();
+
+        for (int attempt = 0; attempt < 8; attempt++) {
+            float angle = random.nextFloat() * (float) (Math.PI * 2);
+            float dist = MIN_SPAWN_DIST + random.nextFloat() * (MAX_SPAWN_DIST - MIN_SPAWN_DIST);
+            float sx = pPos.x + (float) Math.cos(angle) * dist;
+            float sz = pPos.z + (float) Math.sin(angle) * dist;
+
+            int surfaceY = WorldConstants.WORLD_HEIGHT - 1;
+            for (int y = WorldConstants.WORLD_HEIGHT - 1; y >= 0; y--) {
+                if (world.getBlock((int) Math.floor(sx), y, (int) Math.floor(sz)) != 0) {
+                    surfaceY = y;
+                    break;
+                }
+            }
+
+            // Must spawn on grass
+            if (world.getBlock((int) Math.floor(sx), surfaceY, (int) Math.floor(sz)) != Blocks.GRASS.id())
+                continue;
+
+            int spawnY = surfaceY + 1;
+            if (world.getBlock((int) Math.floor(sx), spawnY, (int) Math.floor(sz)) != 0) continue;
+            if (world.getBlock((int) Math.floor(sx), spawnY + 1, (int) Math.floor(sz)) != 0) continue;
+
+            // Check light level — chickens need light >= 7
+            int skyLight = world.getSkyLight((int) Math.floor(sx), spawnY, (int) Math.floor(sz));
+            int blockLight = world.getBlockLight((int) Math.floor(sx), spawnY, (int) Math.floor(sz));
+            int maxLight = Math.max(skyLight, blockLight);
+            if (maxLight < HOSTILE_MAX_LIGHT) continue; // too dark for passive mobs
+
+            Chicken chicken = new Chicken(sx, spawnY, sz);
+            entityManager.addEntity(chicken);
+            System.out.printf("[Spawn] Chicken spawned at (%.1f, %d, %.1f) light=%d%n", sx, spawnY, sz, maxLight);
             return;
         }
     }

@@ -200,6 +200,10 @@ public class Player {
             healAmount = 8.0f;
         } else if (blockId == Blocks.RAW_BEEF.id()) {
             healAmount = 3.0f;
+        } else if (blockId == Blocks.COOKED_CHICKEN.id()) {
+            healAmount = 6.0f;
+        } else if (blockId == Blocks.RAW_CHICKEN.id()) {
+            healAmount = 2.0f;
         }
 
         if (healAmount <= 0) return false;

@@ -1289,11 +1289,13 @@ public class GameLoop {
                     furnaceScreen.open(furnace);
                     Input.unlockCursor();
                 }
-                // Try to eat food item (cooked/raw porkchop or beef)
+                // Try to eat food item (cooked/raw porkchop, beef, or chicken)
                 else if (player.getSelectedBlock() == Blocks.COOKED_PORKCHOP.id()
                          || player.getSelectedBlock() == Blocks.RAW_PORKCHOP.id()
                          || player.getSelectedBlock() == Blocks.COOKED_BEEF.id()
-                         || player.getSelectedBlock() == Blocks.RAW_BEEF.id()) {
+                         || player.getSelectedBlock() == Blocks.RAW_BEEF.id()
+                         || player.getSelectedBlock() == Blocks.COOKED_CHICKEN.id()
+                         || player.getSelectedBlock() == Blocks.RAW_CHICKEN.id()) {
                     player.tryEatHeldItem();
                 }
                 // Try to equip armor
