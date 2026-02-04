@@ -67,3 +67,24 @@ tasks.named<JavaExec>("run") {
     // Enough heap for chunk loading + BFS light propagation
     jvmArgs("-Xmx1g", "-Xms256m")
 }
+
+// Fat JAR task - bundles all dependencies into single executable JAR
+tasks.register<Jar>("fatJar") {
+    archiveClassifier.set("all")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    manifest {
+        attributes["Main-Class"] = "com.voxelgame.Main"
+        // macOS needs this for GLFW
+        if (OperatingSystem.current().isMacOsX) {
+            attributes["JVM-Args"] = "-XstartOnFirstThread"
+        }
+    }
+    
+    from(sourceSets.main.get().output)
+    
+    dependsOn(configurations.runtimeClasspath)
+    from({
+        configurations.runtimeClasspath.get().filter { it.name.endsWith("jar") }.map { zipTree(it) }
+    })
+}
