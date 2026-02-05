@@ -131,7 +131,9 @@ public class InventoryScreen {
         glBindVertexArray(0);
     }
 
-    public void setAtlas(TextureAtlas atlas) { this.atlas = atlas; }
+    public void setAtlas(TextureAtlas atlas) { 
+        this.atlas = atlas;
+    }
 
     public boolean isVisible() { return visible; }
     public void setVisible(boolean v) { visible = v; if (!v) { heldItem = null; cancelDrag(); } }
@@ -999,24 +1001,40 @@ public class InventoryScreen {
         // Try to render with texture atlas
         Block block = Blocks.get(bid);
         int tileIndex = block.getTextureIndex(0); // Top face texture
-
-        if (atlas != null && tileIndex > 0) {
+        
+        boolean shouldRenderTexture = atlas != null && tileIndex > 0;
+        
+        if (shouldRenderTexture) {
             // Render with atlas texture
             float[] uv = atlas.getUV(tileIndex);
+            
+            // Ensure proper GL state for textured rendering
             texShader.bind();
             glBindVertexArray(quadVao);
+            
+            // Bind texture AFTER shader is bound
             atlas.bind(0);
             texShader.setInt("uTexture", 0);
-            // Flip V to fix GL y-axis (flame on top for torches, etc.)
+            
+            // Set UV rect (with V flip for correct orientation)
             texShader.setVec4("uUVRect", uv[0], uv[3], uv[2], uv[1]);
+            
+            // Set projection matrix to position the quad on screen
             setProjectionTex(new Matrix4f().ortho(
                 -(sx + off) / PREVIEW_SIZE, (sw - sx - off) / PREVIEW_SIZE,
                 -(sy + off) / PREVIEW_SIZE, (sh - sy - off) / PREVIEW_SIZE,
                 -1, 1));
+            
+            // Draw the textured quad
             glDrawArrays(GL_TRIANGLES, 0, 6);
+            
             texShader.unbind();
+            
+            // Re-bind uiShader for subsequent rendering (matches HUD.java pattern)
+            uiShader.bind();
+            glBindVertexArray(quadVao);
         } else {
-            // Fallback to colored square
+            // Fallback to colored square for items without textures
             uiShader.bind();
             glBindVertexArray(quadVao);
             if (bid > 0 && bid < BLOCK_COLORS.length) {

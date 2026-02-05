@@ -144,7 +144,9 @@ public class CreativeInventoryScreen {
         glBindVertexArray(0);
     }
 
-    public void setAtlas(TextureAtlas atlas) { this.atlas = atlas; }
+    public void setAtlas(TextureAtlas atlas) { 
+        this.atlas = atlas;
+    }
 
     // ================================================================
     // Visibility
@@ -857,8 +859,10 @@ public class CreativeInventoryScreen {
 
         Block block = Blocks.get(bid);
         int tileIndex = block.getTextureIndex(0);
+        
+        boolean shouldRenderTexture = atlas != null && tileIndex > 0;
 
-        if (atlas != null && tileIndex > 0) {
+        if (shouldRenderTexture) {
             float[] uv = atlas.getUV(tileIndex);
             texShader.bind();
             glBindVertexArray(quadVao);
@@ -872,6 +876,9 @@ public class CreativeInventoryScreen {
                 -1, 1));
             glDrawArrays(GL_TRIANGLES, 0, 6);
             texShader.unbind();
+            // Re-bind uiShader for subsequent rendering
+            uiShader.bind();
+            glBindVertexArray(quadVao);
         } else {
             uiShader.bind();
             glBindVertexArray(quadVao);
