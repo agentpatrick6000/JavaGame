@@ -267,61 +267,51 @@ public class Hud {
             if (bid > 0 && stack != null && !stack.isEmpty()) {
                 float off = (SLOT_SIZE - PREVIEW_SIZE) / 2f;
 
-                if (stack.hasDurability()) {
-                    // Tool: render with distinctive shape
-                    float[] c = (bid < BLOCK_COLORS.length) ? BLOCK_COLORS[bid] : new float[]{0.5f,0.5f,0.5f,1.0f};
-                    float headH = PREVIEW_SIZE * 0.5f;
-                    float handleW = PREVIEW_SIZE * 0.25f;
-                    float handleH = PREVIEW_SIZE * 0.5f;
-                    fillRect(sx + off, y0 + off + handleH, PREVIEW_SIZE, headH, c[0], c[1], c[2], c[3]);
-                    float hx = sx + off + (PREVIEW_SIZE - handleW) / 2;
-                    fillRect(hx, y0 + off, handleW, handleH, 0.5f, 0.35f, 0.15f, 1.0f);
-                    float durFrac = stack.getDurabilityFraction();
-                    if (durFrac >= 0 && durFrac < 1.0f) {
-                        float barH = 3.0f;
-                        fillRect(sx + 2, y0 + 2, SLOT_SIZE - 4, barH, 0.1f, 0.1f, 0.1f, 0.7f);
-                        float dr = durFrac < 0.5f ? 1.0f : durFrac * 2 - 1;
-                        float dg = durFrac > 0.5f ? 1.0f : durFrac * 2;
-                        fillRect(sx + 2, y0 + 2, (SLOT_SIZE - 4) * durFrac, barH, dr, dg, 0.2f, 0.9f);
+                // Always render with texture if atlas exists
+                Block block = Blocks.get(bid);
+                int tileIndex = block.getTextureIndex(0);
+                
+                if (atlas != null && tileIndex >= 0) {
+                    float[] uv = atlas.getUV(tileIndex);
+                    texShader.bind();
+                    glBindVertexArray(quadVao);
+                    glActiveTexture(GL_TEXTURE0);
+                    atlas.bind(0);
+                    texShader.setInt("uTexture", 0);
+                    texShader.setVec4("uUVRect", uv[0], uv[3], uv[2], uv[1]);
+                    setProjectionTex(new Matrix4f().ortho(
+                        -(sx + off) / PREVIEW_SIZE, (sw - sx - off) / PREVIEW_SIZE,
+                        -(y0 + off) / PREVIEW_SIZE, (sh - y0 - off) / PREVIEW_SIZE,
+                        -1, 1));
+                    glDrawArrays(GL_TRIANGLES, 0, 6);
+                    texShader.unbind();
+                    uiShader.bind();
+                    glBindVertexArray(quadVao);
+                    
+                    // Draw durability bar on top if applicable
+                    if (stack.hasDurability()) {
+                        float durFrac = stack.getDurabilityFraction();
+                        if (durFrac >= 0 && durFrac < 1.0f) {
+                            float barH = 3.0f;
+                            fillRect(sx + 2, y0 + 2, SLOT_SIZE - 4, barH, 0.1f, 0.1f, 0.1f, 0.7f);
+                            float dr = durFrac < 0.5f ? 1.0f : durFrac * 2 - 1;
+                            float dg = durFrac > 0.5f ? 1.0f : durFrac * 2;
+                            fillRect(sx + 2, y0 + 2, (SLOT_SIZE - 4) * durFrac, barH, dr, dg, 0.2f, 0.9f);
+                        }
                     }
-                } else {
-                    // Try textured rendering with atlas
-                    Block block = Blocks.get(bid);
-                    int tileIndex = block.getTextureIndex(0);
-                    boolean renderedTexture = false;
-
-                    if (atlas != null && tileIndex > 0) {
-                        float[] uv = atlas.getUV(tileIndex);
-                        texShader.bind();
-                        glBindVertexArray(quadVao);
-                        atlas.bind(0);
-                        texShader.setInt("uTexture", 0);
-                        // Flip V coordinates: GL texture has y=0 at bottom, but pixel data
-                        // has y=0 at top (image convention). Swap v0↔v1 so textures render
-                        // right-side-up (flame on top for torch, petals on top for flowers, etc.)
-                        texShader.setVec4("uUVRect", uv[0], uv[3], uv[2], uv[1]);
-                        setProjectionTex(new Matrix4f().ortho(
-                            -(sx + off) / PREVIEW_SIZE, (sw - sx - off) / PREVIEW_SIZE,
-                            -(y0 + off) / PREVIEW_SIZE, (sh - y0 - off) / PREVIEW_SIZE,
-                            -1, 1));
-                        glDrawArrays(GL_TRIANGLES, 0, 6);
-                        texShader.unbind();
-                        renderedTexture = true;
-                        // Re-bind ui shader for subsequent drawing
-                        uiShader.bind();
-                        glBindVertexArray(quadVao);
-                    }
-
-                    if (!renderedTexture && bid < BLOCK_COLORS.length) {
-                        float[] c = BLOCK_COLORS[bid];
-                        fillRect(sx + off, y0 + off, PREVIEW_SIZE, PREVIEW_SIZE, c[0], c[1], c[2], c[3]);
-                    }
-
-                    if (player.getGameMode() != GameMode.CREATIVE && stack.getCount() < Inventory.MAX_STACK) {
+                    
+                    // Item count bar
+                    if (!stack.hasDurability() && player.getGameMode() != GameMode.CREATIVE && stack.getCount() < Inventory.MAX_STACK) {
                         float countFrac = (float) stack.getCount() / Inventory.MAX_STACK;
                         float barH = 3.0f;
                         fillRect(sx + 2, y0 + 2, (SLOT_SIZE - 4) * countFrac, barH,
                                  0.2f, 0.8f, 0.2f, 0.7f);
+                    }
+                } else {
+                    // Fallback colored square (should rarely happen)
+                    if (bid < BLOCK_COLORS.length) {
+                        float[] c = BLOCK_COLORS[bid];
+                        fillRect(sx + off, y0 + off, PREVIEW_SIZE, PREVIEW_SIZE, c[0], c[1], c[2], c[3]);
                     }
                 }
 

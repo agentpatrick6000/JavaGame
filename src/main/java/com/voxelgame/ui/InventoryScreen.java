@@ -975,18 +975,33 @@ public class InventoryScreen {
         int bid = stack.getBlockId();
         float off = (SLOT_SIZE - PREVIEW_SIZE) / 2f;
 
-        if (stack.hasDurability()) {
-            // Tool rendering (colored shape)
-            uiShader.bind();
+        Block block = Blocks.get(bid);
+        int tileIndex = block.getTextureIndex(0);
+        
+        // ALWAYS render with texture if atlas exists and tileIndex >= 0
+        if (atlas != null && tileIndex >= 0) {
+            float[] uv = atlas.getUV(tileIndex);
+            
+            float px = sx + off;
+            float py = sy + off;
+            
+            texShader.bind();
             glBindVertexArray(quadVao);
-            if (bid > 0 && bid < BLOCK_COLORS.length) {
-                float[] c = BLOCK_COLORS[bid];
-                float headH = PREVIEW_SIZE * 0.5f;
-                float handleW = PREVIEW_SIZE * 0.25f;
-                float handleH = PREVIEW_SIZE * 0.5f;
-                fillRect(sx + off, sy + off + handleH, PREVIEW_SIZE, headH, c[0], c[1], c[2], c[3]);
-                float hx = sx + off + (PREVIEW_SIZE - handleW) / 2;
-                fillRect(hx, sy + off, handleW, handleH, 0.5f, 0.35f, 0.15f, 1.0f);
+            glActiveTexture(GL_TEXTURE0);
+            atlas.bind(0);
+            texShader.setInt("uTexture", 0);
+            texShader.setVec4("uUVRect", uv[0], uv[3], uv[2], uv[1]);
+            setProjectionTex(new Matrix4f().ortho(
+                -px / PREVIEW_SIZE, (sw - px) / PREVIEW_SIZE,
+                -py / PREVIEW_SIZE, (sh - py) / PREVIEW_SIZE,
+                -1, 1));
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            texShader.unbind();
+            
+            // Draw durability bar on top if applicable
+            if (stack.hasDurability()) {
+                uiShader.bind();
+                glBindVertexArray(quadVao);
                 float durFrac = stack.getDurabilityFraction();
                 if (durFrac >= 0 && durFrac < 1.0f) {
                     fillRect(sx + 2, sy + 2, SLOT_SIZE - 4, 3, 0.1f, 0.1f, 0.1f, 0.7f);
@@ -995,53 +1010,8 @@ public class InventoryScreen {
                     fillRect(sx + 2, sy + 2, (SLOT_SIZE - 4) * durFrac, 3, r, g, 0.2f, 0.9f);
                 }
             }
-            return;
-        }
-
-        // Try to render with texture atlas
-        Block block = Blocks.get(bid);
-        int tileIndex = block.getTextureIndex(0); // Top face texture
-        
-        boolean shouldRenderTexture = atlas != null && tileIndex > 0;
-        
-        if (shouldRenderTexture) {
-            // Render with atlas texture
-            float[] uv = atlas.getUV(tileIndex);
-            
-            // Position where the preview should appear
-            float px = sx + off;
-            float py = sy + off;
-            
-            // Switch to texture shader
-            texShader.bind();
-            glBindVertexArray(quadVao);
-            
-            // Bind the atlas texture to texture unit 0
-            glActiveTexture(GL_TEXTURE0);
-            atlas.bind(0);
-            texShader.setInt("uTexture", 0);
-            
-            // Set UV rect (with V flip for correct orientation)
-            texShader.setVec4("uUVRect", uv[0], uv[3], uv[2], uv[1]);
-            
-            // Set projection matrix using the same approach as fillRect
-            // The quad vertices are (0,0)-(1,1), we need to transform them to
-            // screen position (px, py) with size PREVIEW_SIZE
-            setProjectionTex(new Matrix4f().ortho(
-                -px / PREVIEW_SIZE, (sw - px) / PREVIEW_SIZE,
-                -py / PREVIEW_SIZE, (sh - py) / PREVIEW_SIZE,
-                -1, 1));
-            
-            // Draw the textured quad
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-            
-            texShader.unbind();
-            
-            // Re-bind uiShader for subsequent rendering
-            uiShader.bind();
-            glBindVertexArray(quadVao);
         } else {
-            // Fallback to colored square for items without textures
+            // Fallback colored square (should rarely happen)
             uiShader.bind();
             glBindVertexArray(quadVao);
             if (bid > 0 && bid < BLOCK_COLORS.length) {
