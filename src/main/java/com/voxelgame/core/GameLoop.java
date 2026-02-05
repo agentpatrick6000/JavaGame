@@ -11,6 +11,7 @@ import com.voxelgame.render.GLInit;
 import com.voxelgame.render.ItemEntityRenderer;
 import com.voxelgame.render.PostFX;
 import com.voxelgame.render.Renderer;
+import com.voxelgame.render.SkyRenderer;
 import com.voxelgame.save.SaveManager;
 import com.voxelgame.save.WorldMeta;
 import com.voxelgame.sim.ArmorItem;
@@ -103,6 +104,7 @@ public class GameLoop {
     private ChunkManager chunkManager;
     private Renderer renderer;
     private PostFX postFX;
+    private SkyRenderer skyRenderer;
     private SaveManager saveManager;
 
     // UI screens
@@ -416,6 +418,9 @@ public class GameLoop {
         postFX = new PostFX();
         postFX.init(window.getFramebufferWidth(), window.getFramebufferHeight());
 
+        skyRenderer = new SkyRenderer();
+        skyRenderer.init();
+
         chunkManager = new ChunkManager(world);
         chunkManager.setSaveManager(saveManager);
 
@@ -640,6 +645,7 @@ public class GameLoop {
         if (itemEntityRenderer != null) itemEntityRenderer.cleanup();
         if (hud != null) hud.cleanup();
         if (postFX != null) postFX.cleanup();
+        if (skyRenderer != null) skyRenderer.cleanup();
         if (renderer != null) renderer.cleanup();
 
         player = null;
@@ -649,6 +655,7 @@ public class GameLoop {
         chunkManager = null;
         renderer = null;
         postFX = null;
+        skyRenderer = null;
         saveManager = null;
         hud = null;
         debugOverlay = null;
@@ -1103,6 +1110,12 @@ public class GameLoop {
         glDisable(GL_BLEND);
         glEnable(GL_CULL_FACE);
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+        // Render sky gradient first (at far depth)
+        if (skyRenderer != null && skyRenderer.isInitialized()) {
+            skyRenderer.updateColors(worldTime);
+            skyRenderer.render();
+        }
 
         renderer.render(player.getCamera(), fbW, fbH);
 
