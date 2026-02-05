@@ -55,6 +55,7 @@ public final class ToolItem {
         new ToolItem(Blocks.WOODEN_SWORD.id(),    ToolType.NONE,    ToolTier.WOOD, "Wooden Sword"),
         new ToolItem(Blocks.STONE_SWORD.id(),     ToolType.NONE,    ToolTier.STONE, "Stone Sword"),
         new ToolItem(Blocks.WOODEN_HOE.id(),      ToolType.HOE,     ToolTier.WOOD, "Wooden Hoe"),
+        new ToolItem(Blocks.FLINT_AND_STEEL.id(), ToolType.NONE,    ToolTier.WOOD, "Flint and Steel"),  // 64 uses like wood tier
     };
 
     public static boolean isTool(int blockId) { return get(blockId) != null; }

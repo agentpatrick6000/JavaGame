@@ -130,6 +130,9 @@ public final class RecipeRegistry {
         int FEATHER = Blocks.FEATHER.id();
         recipes.add(new Recipe(1, 3, new int[]{ FLINT, STICK, FEATHER }, Blocks.ARROW_ITEM.id(), 4));
 
+        // Flint and steel (shapeless: iron ingot + flint)
+        recipes.add(Recipe.shapeless(new int[]{ IRON_INGOT, FLINT }, Blocks.FLINT_AND_STEEL.id(), 1));
+
         // Iron armor
         recipes.add(new Recipe(2, 2, new int[]{ IRON_INGOT, IRON_INGOT, IRON_INGOT, 0 }, Blocks.IRON_HELMET.id(), 1));
         recipes.add(new Recipe(2, 2, new int[]{ IRON_INGOT, 0, IRON_INGOT, IRON_INGOT }, Blocks.IRON_CHESTPLATE.id(), 1));

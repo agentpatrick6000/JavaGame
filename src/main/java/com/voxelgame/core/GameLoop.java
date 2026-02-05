@@ -1415,6 +1415,40 @@ public class GameLoop {
                         System.out.println("[Farming] Planted wheat at (" + px + ", " + py + ", " + pz + ")");
                     }
                 }
+                // ---- Flint and Steel: Light fire on block face ----
+                else if (Blocks.isFlintAndSteel(player.getSelectedBlock())) {
+                    // Calculate position adjacent to clicked face (where fire will be placed)
+                    int fx = currentHit.x() + currentHit.nx();
+                    int fy = currentHit.y() + currentHit.ny();
+                    int fz = currentHit.z() + currentHit.nz();
+                    int targetBlock = world.getBlock(fx, fy, fz);
+                    
+                    // Can only place fire in air
+                    if (targetBlock == Blocks.AIR.id()) {
+                        // Place fire block
+                        world.setBlock(fx, fy, fz, Blocks.FIRE.id());
+                        Set<ChunkPos> affected = Lighting.onBlockPlaced(world, fx, fy, fz);
+                        chunkManager.rebuildMeshAt(fx, fy, fz);
+                        chunkManager.rebuildChunks(affected);
+                        
+                        // Propagate fire light (level 15)
+                        propagateBlockLight(fx, fy, fz, 15);
+                        
+                        // Damage flint and steel in survival mode
+                        if (!isCreative) {
+                            Inventory.ItemStack heldTool = player.getInventory().getSlot(player.getSelectedSlot());
+                            if (heldTool != null && heldTool.hasDurability()) {
+                                boolean broke = heldTool.damageTool(1);
+                                if (broke) {
+                                    player.getInventory().setSlot(player.getSelectedSlot(), null);
+                                    System.out.println("[Fire] Flint and steel broke!");
+                                }
+                            }
+                        }
+                        
+                        System.out.println("[Fire] Lit fire at (" + fx + ", " + fy + ", " + fz + ")");
+                    }
+                }
                 // Try to eat food item (cooked/raw porkchop, beef, or chicken)
                 else if (player.getSelectedBlock() == Blocks.COOKED_PORKCHOP.id()
                          || player.getSelectedBlock() == Blocks.RAW_PORKCHOP.id()

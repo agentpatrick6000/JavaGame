@@ -35,8 +35,8 @@ public final class Blocks {
     public static final Block BEDROCK      = new Block(14, "bedrock",      true,  false, new int[]{16},                -1.0f,  0);  // unbreakable
 
     // ---- Mob drop items (non-solid, non-placeable) ----
-    public static final Block RAW_PORKCHOP = new Block(15, "raw_porkchop", false, true,  new int[]{17},                 0.0f, -1);  // pig drop
-    public static final Block ROTTEN_FLESH = new Block(16, "rotten_flesh", false, true,  new int[]{18},                 0.0f, -1);  // zombie drop
+    public static final Block RAW_PORKCHOP = new Block(15, "raw_porkchop", false, true,  new int[]{109},                0.0f, -1);  // pig drop - item sprite
+    public static final Block ROTTEN_FLESH = new Block(16, "rotten_flesh", false, true,  new int[]{111},                0.0f, -1);  // zombie drop - item sprite
 
     // ---- Crafted blocks (solid, placeable) ----
     public static final Block PLANKS         = new Block(17, "planks",         true,  false, new int[]{19},                 2.0f, -1);
@@ -80,7 +80,7 @@ public final class Blocks {
     public static final Block GLASS          = new Block(35, "glass",          true,  true,  new int[]{33},                 0.0f, -1);
 
     // Cooked porkchop (from smelting raw pork)
-    public static final Block COOKED_PORKCHOP = new Block(36, "cooked_porkchop", false, true, new int[]{34},               0.0f, -1);
+    public static final Block COOKED_PORKCHOP = new Block(36, "cooked_porkchop", false, true, new int[]{110},              0.0f, -1);  // item sprite
 
     // Flowers (non-solid, transparent, decorative)
     public static final Block RED_FLOWER     = new Block(37, "red_flower",     false, true,  new int[]{35},                 0.0f, -1);
@@ -256,12 +256,12 @@ public final class Blocks {
     public static final Block WHEAT_CROP_6         = new Block(122, "wheat_crop_6", false, true, new int[]{55}, 0.0f, 0);
     public static final Block WHEAT_CROP_7         = new Block(123, "wheat_crop_7", false, true, new int[]{56}, 0.0f, 0);
     public static final Block LEATHER              = new Block(124, "leather", false, true, new int[]{103}, 0.0f, -1);  // leather sprite
-    public static final Block RAW_BEEF             = new Block(125, "raw_beef", false, true, new int[]{17}, 0.0f, -1);  // raw_porkchop (keep)
-    public static final Block COOKED_BEEF          = new Block(126, "cooked_beef", false, true, new int[]{34}, 0.0f, -1);  // cooked_porkchop (keep)
+    public static final Block RAW_BEEF             = new Block(125, "raw_beef", false, true, new int[]{112}, 0.0f, -1);  // raw_beef item sprite
+    public static final Block COOKED_BEEF          = new Block(126, "cooked_beef", false, true, new int[]{113}, 0.0f, -1);  // cooked_beef item sprite
     public static final Block WOOL                 = new Block(127, "wool", true, false, new int[]{108}, 0.8f, -1);  // wool sprite
     public static final Block FEATHER              = new Block(128, "feather", false, true, new int[]{58}, 0.0f, -1);  // wheat seeds (placeholder)
-    public static final Block RAW_CHICKEN          = new Block(129, "raw_chicken", false, true, new int[]{17}, 0.0f, -1);  // raw_porkchop (reuse)
-    public static final Block COOKED_CHICKEN       = new Block(130, "cooked_chicken", false, true, new int[]{34}, 0.0f, -1);  // cooked_porkchop (reuse)
+    public static final Block RAW_CHICKEN          = new Block(129, "raw_chicken", false, true, new int[]{114}, 0.0f, -1);  // raw_chicken item sprite
+    public static final Block COOKED_CHICKEN       = new Block(130, "cooked_chicken", false, true, new int[]{115}, 0.0f, -1);  // cooked_chicken item sprite
     public static final Block STRING               = new Block(131, "string", false, true, new int[]{104}, 0.0f, -1);  // string sprite
     public static final Block FLINT                = new Block(132, "flint", false, true, new int[]{105}, 0.0f, -1);  // flint sprite
     public static final Block BOW                  = new Block(133, "bow", false, true, new int[]{101}, 0.0f, -1);  // bow sprite
@@ -272,11 +272,17 @@ public final class Blocks {
     public static final Block WHEAT_SEEDS          = new Block(136, "wheat_seeds", false, true, new int[]{58}, 0.0f, -1);
     public static final Block WHEAT_ITEM           = new Block(137, "wheat", false, true, new int[]{59}, 0.0f, -1);
 
+    // Fire block (non-solid, transparent, placed via flint and steel)
+    public static final Block FIRE                 = new Block(138, "fire", false, true, new int[]{118}, 0.0f, 0);  // fire sprite, instant break, drops nothing
+
+    // Flint and steel tool (non-solid, non-placeable, has durability)
+    public static final Block FLINT_AND_STEEL      = new Block(139, "flint_and_steel", false, true, new int[]{117}, 0.0f, -1);  // flint_and_steel sprite
+
     /** All blocks indexed by ID for fast lookup. */
     private static final Block[] REGISTRY;
 
     static {
-        REGISTRY = new Block[138]; // IDs 0-137
+        REGISTRY = new Block[140]; // IDs 0-139
         REGISTRY[0]  = AIR;          REGISTRY[1]  = STONE;         REGISTRY[2]  = COBBLESTONE;
         REGISTRY[3]  = DIRT;         REGISTRY[4]  = GRASS;         REGISTRY[5]  = SAND;
         REGISTRY[6]  = GRAVEL;       REGISTRY[7]  = LOG;           REGISTRY[8]  = LEAVES;
@@ -355,6 +361,8 @@ public final class Blocks {
         REGISTRY[135] = WOODEN_HOE;
         REGISTRY[136] = WHEAT_SEEDS;
         REGISTRY[137] = WHEAT_ITEM;
+        REGISTRY[138] = FIRE;
+        REGISTRY[139] = FLINT_AND_STEEL;
     }
 
     /**
@@ -380,8 +388,19 @@ public final class Blocks {
         if (blockId == TORCH.id()) return 14;
         if (blockId == REDSTONE_TORCH.id()) return 7;
         if (blockId == JACK_O_LANTERN.id()) return 15;
+        if (blockId == FIRE.id()) return 15;  // Fire emits full light
         if (isLava(blockId)) return 15;
         return 0;
+    }
+
+    /** Check if a block is fire. */
+    public static boolean isFire(int blockId) {
+        return blockId == FIRE.id();
+    }
+
+    /** Check if a block is flint and steel. */
+    public static boolean isFlintAndSteel(int blockId) {
+        return blockId == FLINT_AND_STEEL.id();
     }
 
     // ======== Fluid helper methods (Infdev 611) ========
@@ -504,6 +523,7 @@ public final class Blocks {
             || blockId == STONE_BUTTON.id()
             || blockId == LEVER.id()
             || blockId == SNOW_LAYER.id()
+            || blockId == FIRE.id()
             || isWheatCrop(blockId);
     }
 
