@@ -1,9 +1,11 @@
 package com.voxelgame.ui;
 
 import com.voxelgame.render.Shader;
+import com.voxelgame.render.TextureAtlas;
 import com.voxelgame.sim.Furnace;
 import com.voxelgame.sim.SmeltingRecipe;
 import com.voxelgame.sim.Inventory;
+import com.voxelgame.world.Block;
 import com.voxelgame.world.Blocks;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryStack;
@@ -23,28 +25,11 @@ public class FurnaceScreen {
     private static final float PANEL_W = 300;
     private static final float PANEL_H = 200;
 
-    // Block colors for rendering slot previews (reuse from InventoryScreen pattern)
-    private static float[] getBlockColor(int id) {
-        if (id == Blocks.COAL.id()) return new float[]{0.15f, 0.15f, 0.15f, 1f};
-        if (id == Blocks.COAL_ORE.id()) return new float[]{0.35f, 0.35f, 0.35f, 1f};
-        if (id == Blocks.IRON_ORE.id()) return new float[]{0.55f, 0.45f, 0.35f, 1f};
-        if (id == Blocks.IRON_INGOT.id()) return new float[]{0.80f, 0.78f, 0.75f, 1f};
-        if (id == Blocks.SAND.id()) return new float[]{0.84f, 0.81f, 0.60f, 1f};
-        if (id == Blocks.GLASS.id()) return new float[]{0.85f, 0.92f, 0.95f, 0.7f};
-        if (id == Blocks.RAW_PORKCHOP.id()) return new float[]{0.95f, 0.55f, 0.50f, 1f};
-        if (id == Blocks.COOKED_PORKCHOP.id()) return new float[]{0.78f, 0.51f, 0.31f, 1f};
-        if (id == Blocks.PLANKS.id()) return new float[]{0.70f, 0.55f, 0.30f, 1f};
-        if (id == Blocks.STICK.id()) return new float[]{0.65f, 0.50f, 0.25f, 1f};
-        if (id == Blocks.LOG.id()) return new float[]{0.39f, 0.27f, 0.16f, 1f};
-        if (id == Blocks.COBBLESTONE.id()) return new float[]{0.39f, 0.39f, 0.39f, 1f};
-        if (id == Blocks.STONE.id()) return new float[]{0.47f, 0.47f, 0.47f, 1f};
-        if (id == Blocks.DIAMOND.id()) return new float[]{0.39f, 0.86f, 1.0f, 1f};
-        return new float[]{0.50f, 0.50f, 0.50f, 1f};
-    }
-
     private BitmapFont font;
     private Shader uiShader;
+    private Shader texShader;
     private int quadVao, quadVbo;
+    private TextureAtlas atlas;
     private int sw, sh;
     private float mouseX, mouseY;
 
@@ -63,6 +48,7 @@ public class FurnaceScreen {
     public void init(BitmapFont font) {
         this.font = font;
         uiShader = new Shader("shaders/ui.vert", "shaders/ui.frag");
+        texShader = new Shader("shaders/ui_tex.vert", "shaders/ui_tex.frag");
 
         float[] v = { 0,0, 1,0, 1,1,  0,0, 1,1, 0,1 };
         quadVao = glGenVertexArrays();
@@ -77,6 +63,10 @@ public class FurnaceScreen {
         glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * 4, 0);
         glEnableVertexAttribArray(0);
         glBindVertexArray(0);
+    }
+
+    public void setAtlas(TextureAtlas atlas) {
+        this.atlas = atlas;
     }
 
     public void open(Furnace furnace) {
@@ -310,14 +300,42 @@ public class FurnaceScreen {
     }
 
     private void renderSlot(float x, float y, int blockId, int count) {
+        // Slot background
         fillRect(x, y, SLOT_SIZE, SLOT_SIZE, 0.12f, 0.12f, 0.14f, 1);
         fillRect(x + BORDER, y + BORDER, SLOT_SIZE - 2 * BORDER, SLOT_SIZE - 2 * BORDER,
                  0.22f, 0.22f, 0.26f, 1);
 
         if (blockId > 0 && count > 0) {
-            float[] c = getBlockColor(blockId);
-            float pad = (SLOT_SIZE - PREVIEW_SIZE) / 2;
-            fillRect(x + pad, y + pad, PREVIEW_SIZE, PREVIEW_SIZE, c[0], c[1], c[2], c[3]);
+            float off = (SLOT_SIZE - PREVIEW_SIZE) / 2f;
+            float px = x + off;
+            float py = y + off;
+
+            Block block = Blocks.get(blockId);
+            int tileIndex = block.getTextureIndex(0);
+
+            if (atlas != null && tileIndex >= 0) {
+                float[] uv = atlas.getUV(tileIndex);
+
+                texShader.bind();
+                glBindVertexArray(quadVao);
+                glActiveTexture(GL_TEXTURE0);
+                atlas.bind(0);
+                texShader.setInt("uTexture", 0);
+                texShader.setVec4("uUVRect", uv[0], uv[3], uv[2], uv[1]);
+                setProjectionTex(new Matrix4f().ortho(
+                    -px / PREVIEW_SIZE, (sw - px) / PREVIEW_SIZE,
+                    -py / PREVIEW_SIZE, (sh - py) / PREVIEW_SIZE,
+                    -1, 1));
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+                texShader.unbind();
+
+                // Switch back to uiShader for subsequent rendering
+                uiShader.bind();
+                glBindVertexArray(quadVao);
+            } else {
+                // Fallback colored square (should rarely happen)
+                fillRect(px, py, PREVIEW_SIZE, PREVIEW_SIZE, 0.5f, 0.5f, 0.5f, 1.0f);
+            }
         }
     }
 
@@ -356,9 +374,20 @@ public class FurnaceScreen {
         }
     }
 
+    private void setProjectionTex(Matrix4f proj) {
+        try (MemoryStack stk = MemoryStack.stackPush()) {
+            FloatBuffer fb = stk.mallocFloat(16);
+            proj.get(fb);
+            glUniformMatrix4fv(
+                glGetUniformLocation(texShader.getProgramId(), "uProjection"),
+                false, fb);
+        }
+    }
+
     public void cleanup() {
         if (quadVbo != 0) glDeleteBuffers(quadVbo);
         if (quadVao != 0) glDeleteVertexArrays(quadVao);
         if (uiShader != null) uiShader.cleanup();
+        if (texShader != null) texShader.cleanup();
     }
 }

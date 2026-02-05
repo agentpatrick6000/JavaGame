@@ -537,6 +537,7 @@ public class GameLoop {
 
         chestScreen = new ChestScreen();
         chestScreen.init(bitmapFont);
+        chestScreen.setAtlas(renderer.getAtlas());
         chestManager = new ChestManager();
 
         // Load chest tile entities from disk
@@ -550,6 +551,7 @@ public class GameLoop {
 
         furnaceScreen = new FurnaceScreen();
         furnaceScreen.init(bitmapFont);
+        furnaceScreen.setAtlas(renderer.getAtlas());
         furnaceManager = new FurnaceManager();
 
         // Load furnace tile entities from disk

@@ -1,8 +1,11 @@
 package com.voxelgame.ui;
 
 import com.voxelgame.render.Shader;
+import com.voxelgame.render.TextureAtlas;
 import com.voxelgame.sim.Chest;
 import com.voxelgame.sim.Inventory;
+import com.voxelgame.world.Block;
+import com.voxelgame.world.Blocks;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryStack;
 
@@ -24,63 +27,15 @@ public class ChestScreen {
     private static final float BORDER = 2.0f;
     private static final float BG_PADDING = 16.0f;
 
-    private static final float[][] BLOCK_COLORS = {
-        {0.0f, 0.0f, 0.0f, 0.0f},
-        {0.47f, 0.47f, 0.47f, 1.0f},
-        {0.39f, 0.39f, 0.39f, 1.0f},
-        {0.53f, 0.38f, 0.26f, 1.0f},
-        {0.30f, 0.60f, 0.00f, 1.0f},
-        {0.84f, 0.81f, 0.60f, 1.0f},
-        {0.51f, 0.49f, 0.49f, 1.0f},
-        {0.39f, 0.27f, 0.16f, 1.0f},
-        {0.20f, 0.51f, 0.04f, 0.9f},
-        {0.12f, 0.31f, 0.78f, 0.6f},
-        {0.35f, 0.35f, 0.35f, 1.0f},
-        {0.55f, 0.45f, 0.35f, 1.0f},
-        {0.75f, 0.65f, 0.20f, 1.0f},
-        {0.39f, 0.86f, 1.00f, 1.0f},
-        {0.16f, 0.16f, 0.16f, 1.0f},
-        {0.95f, 0.55f, 0.50f, 1.0f},
-        {0.55f, 0.40f, 0.25f, 1.0f},
-        {0.70f, 0.55f, 0.30f, 1.0f},
-        {0.60f, 0.45f, 0.25f, 1.0f},
-        {0.65f, 0.50f, 0.25f, 1.0f},
-        {0.58f, 0.42f, 0.20f, 1.0f},
-        {0.55f, 0.40f, 0.18f, 1.0f},
-        {0.52f, 0.38f, 0.16f, 1.0f},
-        {0.50f, 0.50f, 0.52f, 1.0f},
-        {0.48f, 0.48f, 0.50f, 1.0f},
-        {0.46f, 0.46f, 0.48f, 1.0f},
-        {0.60f, 0.40f, 0.20f, 1.0f},  // 26 CHEST
-        {0.45f, 0.45f, 0.45f, 1.0f},  // 27 RAIL
-        {0.85f, 0.20f, 0.15f, 1.0f},  // 28 TNT
-        {0.55f, 0.35f, 0.15f, 1.0f},  // 29 BOAT
-        {0.50f, 0.50f, 0.55f, 1.0f},  // 30 MINECART
-        {0.45f, 0.45f, 0.45f, 1.0f},  // 31 FURNACE
-        {1.00f, 0.85f, 0.30f, 1.0f},  // 32 TORCH
-        {0.15f, 0.15f, 0.15f, 1.0f},  // 33 COAL
-        {0.78f, 0.76f, 0.74f, 1.0f},  // 34 IRON_INGOT
-        {0.82f, 0.90f, 0.94f, 0.5f},  // 35 GLASS
-        {0.78f, 0.51f, 0.31f, 1.0f},  // 36 COOKED_PORKCHOP
-        {0.86f, 0.15f, 0.15f, 1.0f},  // 37 RED_FLOWER
-        {1.00f, 0.90f, 0.20f, 1.0f},  // 38 YELLOW_FLOWER
-        {0.50f, 0.90f, 1.00f, 1.0f},  // 39 DIAMOND
-        {0.78f, 0.78f, 0.80f, 1.0f},  // 40 IRON_PICKAXE
-        {0.78f, 0.78f, 0.80f, 1.0f},  // 41 IRON_AXE
-        {0.78f, 0.78f, 0.80f, 1.0f},  // 42 IRON_SHOVEL
-        {0.78f, 0.78f, 0.80f, 1.0f},  // 43 IRON_SWORD
-        {0.60f, 0.45f, 0.22f, 1.0f},  // 44 WOODEN_SWORD
-        {0.50f, 0.50f, 0.52f, 1.0f},  // 45 STONE_SWORD
-        {0.22f, 0.16f, 0.10f, 1.0f},  // 46 CHARCOAL
-    };
-
     private boolean visible = false;
     private Chest currentChest = null;
     private Inventory.ItemStack heldItem = null;
 
     private Shader uiShader;
+    private Shader texShader;
     private int quadVao, quadVbo;
     private BitmapFont font;
+    private TextureAtlas atlas;
     private int sw, sh;
     private float mouseX, mouseY;
 
@@ -96,6 +51,7 @@ public class ChestScreen {
     public void init(BitmapFont font) {
         this.font = font;
         uiShader = new Shader("shaders/ui.vert", "shaders/ui.frag");
+        texShader = new Shader("shaders/ui_tex.vert", "shaders/ui_tex.frag");
 
         float[] v = { 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1 };
         quadVao = glGenVertexArrays();
@@ -110,6 +66,10 @@ public class ChestScreen {
         glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * 4, 0);
         glEnableVertexAttribArray(0);
         glBindVertexArray(0);
+    }
+
+    public void setAtlas(TextureAtlas atlas) {
+        this.atlas = atlas;
     }
 
     public boolean isVisible() { return visible; }
@@ -353,12 +313,53 @@ public class ChestScreen {
         }
     }
 
+    /**
+     * Render an item preview using atlas textures.
+     */
     private void renderItemPreview(float sx, float sy, Inventory.ItemStack stack) {
         int bid = stack.getBlockId();
-        if (bid > 0 && bid < BLOCK_COLORS.length) {
-            float[] c = BLOCK_COLORS[bid];
-            float off = (SLOT_SIZE - PREVIEW_SIZE) / 2f;
-            fillRect(sx + off, sy + off, PREVIEW_SIZE, PREVIEW_SIZE, c[0], c[1], c[2], c[3]);
+        if (bid <= 0) return;
+
+        float off = (SLOT_SIZE - PREVIEW_SIZE) / 2f;
+        float px = sx + off;
+        float py = sy + off;
+
+        Block block = Blocks.get(bid);
+        int tileIndex = block.getTextureIndex(0);
+
+        if (atlas != null && tileIndex >= 0) {
+            float[] uv = atlas.getUV(tileIndex);
+
+            texShader.bind();
+            glBindVertexArray(quadVao);
+            glActiveTexture(GL_TEXTURE0);
+            atlas.bind(0);
+            texShader.setInt("uTexture", 0);
+            texShader.setVec4("uUVRect", uv[0], uv[3], uv[2], uv[1]);
+            setProjectionTex(new Matrix4f().ortho(
+                -px / PREVIEW_SIZE, (sw - px) / PREVIEW_SIZE,
+                -py / PREVIEW_SIZE, (sh - py) / PREVIEW_SIZE,
+                -1, 1));
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            texShader.unbind();
+
+            // Switch back to uiShader for subsequent rendering
+            uiShader.bind();
+            glBindVertexArray(quadVao);
+
+            // Draw durability bar on top if applicable
+            if (stack.hasDurability()) {
+                float durFrac = stack.getDurabilityFraction();
+                if (durFrac >= 0 && durFrac < 1.0f) {
+                    fillRect(sx + 2, sy + 2, SLOT_SIZE - 4, 3, 0.1f, 0.1f, 0.1f, 0.7f);
+                    float r = durFrac < 0.5f ? 1.0f : durFrac * 2 - 1;
+                    float g = durFrac > 0.5f ? 1.0f : durFrac * 2;
+                    fillRect(sx + 2, sy + 2, (SLOT_SIZE - 4) * durFrac, 3, r, g, 0.2f, 0.9f);
+                }
+            }
+        } else {
+            // Fallback colored square (should rarely happen)
+            fillRect(px, py, PREVIEW_SIZE, PREVIEW_SIZE, 0.5f, 0.5f, 0.5f, 1.0f);
         }
     }
 
@@ -429,9 +430,20 @@ public class ChestScreen {
         }
     }
 
+    private void setProjectionTex(Matrix4f proj) {
+        try (MemoryStack stk = MemoryStack.stackPush()) {
+            FloatBuffer fb = stk.mallocFloat(16);
+            proj.get(fb);
+            glUniformMatrix4fv(
+                glGetUniformLocation(texShader.getProgramId(), "uProjection"),
+                false, fb);
+        }
+    }
+
     public void cleanup() {
         if (quadVbo != 0) glDeleteBuffers(quadVbo);
         if (quadVao != 0) glDeleteVertexArrays(quadVao);
         if (uiShader != null) uiShader.cleanup();
+        if (texShader != null) texShader.cleanup();
     }
 }
