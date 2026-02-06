@@ -458,13 +458,13 @@ public class NaiveMesher implements Mesher {
     }
 
     private void addVertex(List<Float> verts, float x, float y, float z,
-                          float u, float v, float skyLight, float blockLight) {
+                          float u, float v, float skyVisibility, float blockLight) {
         verts.add(x);
         verts.add(y);
         verts.add(z);
         verts.add(u);
         verts.add(v);
-        verts.add(skyLight);
+        verts.add(skyVisibility);
         verts.add(blockLight);
     }
 

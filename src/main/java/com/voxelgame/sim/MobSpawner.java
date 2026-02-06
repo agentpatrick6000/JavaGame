@@ -12,9 +12,13 @@ import java.util.Random;
 /**
  * Handles mob spawning and despawning logic.
  *
- * Passive spawning (pigs): On grass blocks in light (skyLight >= 7), max 15 per world.
- * Hostile spawning (zombies): In dark areas (light < 7), max 20 per world.
- * Despawn: Entities farther than 128 blocks from player are removed.
+ * Passive spawning (pigs, cows, etc.): On grass blocks in light (effective level >= 7).
+ * Hostile spawning (zombies): In dark areas (effective level < 7).
+ * Despawn: Entities farther than 64 blocks from player are removed.
+ *
+ * Light level is computed using the unified lighting model:
+ * effective_level = max(sky_contribution, block_light)
+ * where sky_contribution = skyVisibility * sunBrightness * 15 / L_REF
  *
  * Max 50 entities total (EntityManager cap).
  */
