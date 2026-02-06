@@ -1,0 +1,18 @@
+{
+  "near_plane": 0.1,
+  "far_plane": 384.0,
+  "sky_intensity": 0.65,
+  "rendered_chunks": 199,
+  "smooth_lighting": true,
+  "postfx_enabled": true,
+  "world_time_ticks": 6100,
+  "player_y": 83.62,
+  "fog_start_base": 192.0,
+  "fog_end_base": 320.0,
+  "notes": {
+    "fog_applied_in": "terrain shader (vFogFactor from vertex) + height fog in fragment",
+    "postfx_effects": "SSAO + ACES tonemap + gamma correction",
+    "srgb_framebuffer": false,
+    "manual_gamma": true
+  }
+}
