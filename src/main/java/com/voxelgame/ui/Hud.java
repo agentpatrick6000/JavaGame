@@ -109,6 +109,11 @@ public class Hud {
     // Breaking progress (0..1, set externally by GameLoop)
     private float breakProgress = 0;
 
+    // Toast message system
+    private String toastMessage = null;
+    private float toastTimer = 0;
+    private static final float TOAST_DURATION = 2.5f;
+
     private int sw, sh;
 
     public void init() {
@@ -131,6 +136,23 @@ public class Hud {
     /** Set the current block-breaking progress (0 = not breaking, 0..1 = progress). */
     public void setBreakProgress(float progress) {
         this.breakProgress = Math.max(0, Math.min(1, progress));
+    }
+
+    /** Show a toast message on screen for a few seconds. */
+    public void showToast(String message) {
+        this.toastMessage = message;
+        this.toastTimer = TOAST_DURATION;
+    }
+
+    /** Update toast timer (call each frame with delta time). */
+    public void updateToast(float dt) {
+        if (toastTimer > 0) {
+            toastTimer -= dt;
+            if (toastTimer <= 0) {
+                toastMessage = null;
+                toastTimer = 0;
+            }
+        }
     }
 
     private void buildCrosshairVAO() {
@@ -193,6 +215,11 @@ public class Hud {
             if (player.isInWater()) {
                 renderWaterOverlay();
             }
+        }
+
+        // Render toast message if active
+        if (toastMessage != null && toastTimer > 0) {
+            renderToast();
         }
 
         uiShader.unbind();
@@ -443,6 +470,39 @@ public class Hud {
         setProjection(new Matrix4f().ortho(0, 1, 0, 1, -1, 1));
         uiShader.setVec4("uColor", 0.8f, 0.0f, 0.0f, 0.3f * intensity);
         glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+
+    /* ---- Toast message ---- */
+
+    private void renderToast() {
+        if (font == null || toastMessage == null) return;
+
+        // Fade out in the last 0.5 seconds
+        float alpha = Math.min(1.0f, toastTimer / 0.5f);
+
+        float textScale = 2.0f;
+        float charW = 8 * textScale;
+        float textWidth = toastMessage.length() * charW;
+
+        // Center horizontally, position in upper third of screen
+        float textX = (sw - textWidth) / 2.0f;
+        float textY = sh * 0.25f;
+
+        // Background box
+        float padding = 8.0f;
+        glBindVertexArray(quadVao);
+        fillRect(textX - padding, sh - textY - 8 * textScale - padding,
+                 textWidth + padding * 2, 8 * textScale + padding * 2,
+                 0.0f, 0.0f, 0.0f, 0.6f * alpha);
+
+        // Text (shadow + main)
+        uiShader.unbind();
+        font.drawText(toastMessage, textX + 1, textY + 1, textScale, sw, sh,
+                     0.0f, 0.0f, 0.0f, 0.8f * alpha);
+        font.drawText(toastMessage, textX, textY, textScale, sw, sh,
+                     1.0f, 1.0f, 1.0f, alpha);
+        uiShader.bind();
+        glBindVertexArray(quadVao);
     }
 
     /* ---- Drawing helpers ---- */

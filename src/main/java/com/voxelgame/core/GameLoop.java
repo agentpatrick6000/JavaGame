@@ -1093,8 +1093,14 @@ public class GameLoop {
 
         // Screenshot (F2) — use framebuffer dimensions for glReadPixels
         if (Input.isKeyPressed(GLFW_KEY_F2)) {
-            Screenshot.capture(window.getFramebufferWidth(), window.getFramebufferHeight());
+            String path = Screenshot.capture(window.getFramebufferWidth(), window.getFramebufferHeight());
+            if (path != null) {
+                hud.showToast("Screenshot saved");
+            }
         }
+        
+        // Update toast timer
+        hud.updateToast(dt);
 
         // Auto-test mode
         if (autoTestMode) {

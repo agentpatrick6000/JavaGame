@@ -37,9 +37,9 @@ public class Main {
                         directWorldName = args[++i];
                     }
                 }
-                case "--direct" -> {
+                case "--direct", "--world" -> {
                     directMode = true;
-                    // Optional world name after --direct
+                    // Optional world name after --direct / --world
                     if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
                         directWorldName = args[++i];
                     }
@@ -57,7 +57,8 @@ public class Main {
                     System.out.println("Usage: java -jar voxelgame.jar [options]");
                     System.out.println();
                     System.out.println("Options:");
-                    System.out.println("  --direct [name]     Skip main menu, load world directly (default: 'default')");
+                    System.out.println("  --world <name>      Skip main menu, load world directly (default: 'default')");
+                    System.out.println("  --direct [name]     Alias for --world");
                     System.out.println("  --automation        Enable automation mode (socket server on localhost:25565)");
                     System.out.println("  --agent-server      Enable AI agent interface (WebSocket on localhost:25566)");
                     System.out.println("  --script <file>     Run automation script (implies --automation)");
