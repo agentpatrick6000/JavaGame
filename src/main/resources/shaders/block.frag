@@ -2,6 +2,7 @@
 in vec2 vTexCoord;
 in float vSkyVisibility;   // 0-1 sky visibility (with AO and directional baked in)
 in float vBlockLight;      // 0-1 block light (with AO and directional baked in)
+in float vHorizonWeight;   // 0-1 how much horizon vs zenith is visible (Phase 2)
 in float vFogFactor;
 in vec3 vViewPos;
 in vec3 vWorldPos;
@@ -10,18 +11,25 @@ uniform sampler2D uAtlas;
 uniform float uAlpha;           // 1.0 for opaque pass, <1.0 for transparent pass
 uniform vec3 uFogColor;         // sky/fog color (matches clear color)
 
-// Unified lighting uniforms
-uniform vec3 uSkyColor;         // Current sky color (zenith, from WorldTime)
-uniform float uSkyIntensity;    // Sky intensity (0-1, typically 0.3-0.5)
+// Phase 2 Sky System uniforms - zenith/horizon color split
+uniform vec3 uSkyZenithColor;   // Overhead sky color (deep blue at noon, dark at night)
+uniform vec3 uSkyHorizonColor;  // Horizon sky color (lighter blue at noon, orange at sunset)
+uniform float uSkyIntensity;    // Overall sky intensity (1.0 at noon, 0.02 at midnight)
+
+// Sun uniforms
 uniform vec3 uSunDirection;     // Direction TO sun (normalized)
-uniform float uSunIntensity;    // Sun intensity for directional lighting (0-1)
-uniform float uSunBrightness;   // Overall sun brightness (0-1, for ambient)
+uniform vec3 uSunColor;         // Sun color (warm white at noon, orange at sunset)
+uniform float uSunIntensity;    // Sun intensity (1.0 at noon, 0.0 at night)
+
+// Legacy uniforms (kept for backward compatibility)
+uniform vec3 uSkyColor;         // Fog/ambient sky color
+uniform float uSunBrightness;   // Overall sun brightness (0-1)
 
 // Block light color (warm torch glow)
 const vec3 BLOCK_LIGHT_COLOR = vec3(1.0, 0.9, 0.7);
 
-// Minimum ambient light (starlight) so caves aren't pitch black
-const float MIN_AMBIENT = 0.02;
+// Minimum ambient light (starlight) so caves aren't completely pitch black
+const float MIN_AMBIENT = 0.015;
 
 layout(location = 0) out vec4 fragColor;
 layout(location = 1) out vec4 fragNormal; // View-space normals for SSAO (PostFX FBO)
@@ -34,17 +42,20 @@ void main() {
     vec3 worldNormal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
 
     // ========================================================================
-    // UNIFIED RGB LIGHTING MODEL
+    // PHASE 2 UNIFIED RGB LIGHTING MODEL
     // ========================================================================
     
-    // 1. SKY LIGHT: Ambient light from sky, modulated by visibility
-    //    Sky-visible surfaces get the sky color; caves (visibility=0) get nothing
-    vec3 skyRGB = uSkyColor * vSkyVisibility * uSkyIntensity;
+    // 1. SKY LIGHT: Mix zenith and horizon colors based on what's visible
+    //    Under overhangs: horizonWeight = 1.0 → mostly horizon color (warm at sunset)
+    //    Open sky: horizonWeight = 0.3 → mix of both (natural balance)
+    vec3 skyColor = mix(uSkyZenithColor, uSkyHorizonColor, vHorizonWeight);
+    vec3 skyRGB = skyColor * vSkyVisibility * uSkyIntensity;
     
     // 2. SUN LIGHT: Directional sunlight (N·L), only for sky-visible surfaces
-    //    Surfaces in caves don't get any sun contribution
+    //    Surfaces in caves (visibility=0) don't get any sun contribution
+    //    Sun color changes with time of day (warm white → orange → off)
     float NdotL = max(dot(worldNormal, uSunDirection), 0.0);
-    vec3 sunRGB = uSkyColor * NdotL * uSunIntensity * vSkyVisibility * 0.6;
+    vec3 sunRGB = uSunColor * NdotL * uSunIntensity * vSkyVisibility * 0.6;
     
     // 3. BLOCK LIGHT: Warm light from torches and other emissive blocks
     //    Always active regardless of sky visibility or time of day
@@ -55,14 +66,19 @@ void main() {
     vec3 totalLight = skyRGB + sunRGB + blockRGB;
     
     // 5. Minimum ambient (starlight) so you can see something in caves
+    //    Very dim so torches are still essential
     totalLight = max(totalLight, vec3(MIN_AMBIENT));
     
     // ========================================================================
-    // NIGHT TINT: Slight blue tint at night for moonlight atmosphere
+    // NIGHT ATMOSPHERE: Subtle blue tint for moonlight feel
     // ========================================================================
-    if (uSunBrightness < 0.5) {
-        float nightFactor = 1.0 - uSunBrightness * 2.0; // 0 at day, 1 at full night
-        totalLight = mix(totalLight, totalLight * vec3(0.7, 0.75, 1.0), nightFactor * 0.4);
+    // When sky intensity is low (night), add a subtle blue tint to the lighting
+    // This simulates the way our eyes perceive colors at night (rod cells)
+    if (uSkyIntensity < 0.3) {
+        float nightFactor = 1.0 - uSkyIntensity / 0.3; // 0 at dusk, 1 at full night
+        // Shift toward blue, but don't overpower torch light
+        float blendStrength = nightFactor * 0.3 * (1.0 - vBlockLight);
+        totalLight = mix(totalLight, totalLight * vec3(0.7, 0.75, 1.0), blendStrength);
     }
 
     // Apply lighting to texture

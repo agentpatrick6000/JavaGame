@@ -14,9 +14,10 @@ import com.voxelgame.world.mesh.RawMeshResult;
  * LOD 2: Heightmap columns — one quad per surface column + side faces
  * LOD 3: Flat colored quad — single quad at average height with average color
  *
- * Vertex format: [x, y, z, u, v, skyVisibility, blockLight] (7 floats)
+ * Phase 2 vertex format: [x, y, z, u, v, skyVisibility, blockLight, horizonWeight] (8 floats)
  * skyVisibility: 0-1 passed to shader for dynamic sky/sun RGB computation
  * blockLight: 0-1 block light level (unused for LOD 1+ but kept for format compatibility)
+ * horizonWeight: 0-1 zenith vs horizon blend (0.3 default for balanced look at distance)
  *
  * All methods are CPU-only (no GL calls). Safe for background threads.
  */
@@ -58,7 +59,7 @@ public class LODMesher {
         // Pre-allocate arrays (avoid ArrayList boxing overhead)
         // Estimate: ~16*128*16 blocks * 6 faces * 4 verts max, but mostly air
         int estimatedVerts = 8192;
-        float[] vertices = new float[estimatedVerts * 7];
+        float[] vertices = new float[estimatedVerts * 8]; // 8 floats per vertex (Phase 2)
         int[] indices = new int[estimatedVerts * 6 / 4]; // 6 indices per quad (4 verts)
         int vertCount = 0;
         int idxCount = 0;
@@ -105,8 +106,8 @@ public class LODMesher {
                         float[] uv = atlas.getUV(texIdx);
                         float light = FACE_LIGHT[face];
 
-                        // Ensure array capacity
-                        if (vertCount + 28 >= vertices.length) {
+                        // Ensure array capacity (8 floats per vertex, 4 vertices = 32 floats)
+                        if (vertCount + 32 >= vertices.length) {
                             vertices = grow(vertices, vertices.length * 2);
                         }
                         if (idxCount + 6 >= indices.length) {
@@ -116,11 +117,12 @@ public class LODMesher {
                         // Add 4 vertices (no AO, flat sky visibility for shader)
                         float[][] fv = FACE_VERTS[face];
                         int[][] fuv = FACE_UV;
-                        int baseVert = vertCount / 7;
+                        int baseVert = vertCount / 8; // 8 floats per vertex now
 
                         // LOD 1+ assumes full sky visibility for surface blocks
                         // (distant chunks don't need per-block lighting accuracy)
                         float skyVis = light; // Use directional light as proxy for visibility
+                        float horizonWeight = 0.3f; // Balanced default for LOD meshes
                         for (int v = 0; v < 4; v++) {
                             float u = (fuv[v][0] == 0) ? uv[0] : uv[2];
                             float vCoord = (fuv[v][1] == 0) ? uv[1] : uv[3];
@@ -129,8 +131,9 @@ public class LODMesher {
                             vertices[vertCount++] = wz + fv[v][2];
                             vertices[vertCount++] = u;
                             vertices[vertCount++] = vCoord;
-                            vertices[vertCount++] = skyVis; // skyVisibility (directional factor baked in)
-                            vertices[vertCount++] = 0.0f;   // blockLight (unused for LOD)
+                            vertices[vertCount++] = skyVis;       // skyVisibility
+                            vertices[vertCount++] = 0.0f;         // blockLight (unused)
+                            vertices[vertCount++] = horizonWeight; // horizonWeight
                         }
 
                         // Standard quad indices
@@ -173,8 +176,8 @@ public class LODMesher {
             }
         }
 
-        // Estimate output size
-        float[] vertices = new float[WorldConstants.CHUNK_SIZE * WorldConstants.CHUNK_SIZE * 7 * 4 * 3];
+        // Estimate output size (8 floats per vertex now)
+        float[] vertices = new float[WorldConstants.CHUNK_SIZE * WorldConstants.CHUNK_SIZE * 8 * 4 * 3];
         int[] indices = new int[WorldConstants.CHUNK_SIZE * WorldConstants.CHUNK_SIZE * 6 * 3];
         int vertCount = 0;
         int idxCount = 0;
@@ -197,8 +200,8 @@ public class LODMesher {
                 float wz = cz + z;
                 float wy = h + 1; // top of block
 
-                // Ensure capacity
-                if (vertCount + 7 * 4 * 5 >= vertices.length) {
+                // Ensure capacity (8 floats per vertex now)
+                if (vertCount + 8 * 4 * 5 >= vertices.length) {
                     vertices = grow(vertices, vertices.length * 2);
                 }
                 if (idxCount + 6 * 5 >= indices.length) {
@@ -206,12 +209,12 @@ public class LODMesher {
                 }
 
                 // Top face quad
-                int baseVert = vertCount / 7;
+                int baseVert = vertCount / 8; // 8 floats per vertex now
                 float light = 1.0f; // full sky light for tops
-                addVert(vertices, vertCount, wx, wy, wz, uv[0], uv[1], light); vertCount += 7;
-                addVert(vertices, vertCount, wx, wy, wz + 1, uv[0], uv[3], light); vertCount += 7;
-                addVert(vertices, vertCount, wx + 1, wy, wz + 1, uv[2], uv[3], light); vertCount += 7;
-                addVert(vertices, vertCount, wx + 1, wy, wz, uv[2], uv[1], light); vertCount += 7;
+                addVert(vertices, vertCount, wx, wy, wz, uv[0], uv[1], light); vertCount += 8;
+                addVert(vertices, vertCount, wx, wy, wz + 1, uv[0], uv[3], light); vertCount += 8;
+                addVert(vertices, vertCount, wx + 1, wy, wz + 1, uv[2], uv[3], light); vertCount += 8;
+                addVert(vertices, vertCount, wx + 1, wy, wz, uv[2], uv[1], light); vertCount += 8;
                 idxCount = addQuadIdx(indices, idxCount, baseVert);
 
                 // Side faces where height changes (create "cliffs")
@@ -241,36 +244,36 @@ public class LODMesher {
                         float y0 = nh + 1;
                         float y1 = h + 1;
 
-                        // Ensure capacity
-                        if (vertCount + 28 >= vertices.length) {
+                        // Ensure capacity (8 floats per vertex)
+                        if (vertCount + 32 >= vertices.length) {
                             vertices = grow(vertices, vertices.length * 2);
                         }
                         if (idxCount + 6 >= indices.length) {
                             indices = growInt(indices, indices.length * 2);
                         }
 
-                        baseVert = vertCount / 7;
+                        baseVert = vertCount / 8; // 8 floats per vertex now
 
                         if (n == 0) { // +X
-                            addVert(vertices, vertCount, wx+1, y1, wz+1, sideUv[0], sideUv[1], sideLight); vertCount += 7;
-                            addVert(vertices, vertCount, wx+1, y0, wz+1, sideUv[0], sideUv[3], sideLight); vertCount += 7;
-                            addVert(vertices, vertCount, wx+1, y0, wz, sideUv[2], sideUv[3], sideLight); vertCount += 7;
-                            addVert(vertices, vertCount, wx+1, y1, wz, sideUv[2], sideUv[1], sideLight); vertCount += 7;
+                            addVert(vertices, vertCount, wx+1, y1, wz+1, sideUv[0], sideUv[1], sideLight); vertCount += 8;
+                            addVert(vertices, vertCount, wx+1, y0, wz+1, sideUv[0], sideUv[3], sideLight); vertCount += 8;
+                            addVert(vertices, vertCount, wx+1, y0, wz, sideUv[2], sideUv[3], sideLight); vertCount += 8;
+                            addVert(vertices, vertCount, wx+1, y1, wz, sideUv[2], sideUv[1], sideLight); vertCount += 8;
                         } else if (n == 1) { // -X
-                            addVert(vertices, vertCount, wx, y1, wz, sideUv[0], sideUv[1], sideLight); vertCount += 7;
-                            addVert(vertices, vertCount, wx, y0, wz, sideUv[0], sideUv[3], sideLight); vertCount += 7;
-                            addVert(vertices, vertCount, wx, y0, wz+1, sideUv[2], sideUv[3], sideLight); vertCount += 7;
-                            addVert(vertices, vertCount, wx, y1, wz+1, sideUv[2], sideUv[1], sideLight); vertCount += 7;
+                            addVert(vertices, vertCount, wx, y1, wz, sideUv[0], sideUv[1], sideLight); vertCount += 8;
+                            addVert(vertices, vertCount, wx, y0, wz, sideUv[0], sideUv[3], sideLight); vertCount += 8;
+                            addVert(vertices, vertCount, wx, y0, wz+1, sideUv[2], sideUv[3], sideLight); vertCount += 8;
+                            addVert(vertices, vertCount, wx, y1, wz+1, sideUv[2], sideUv[1], sideLight); vertCount += 8;
                         } else if (n == 2) { // +Z
-                            addVert(vertices, vertCount, wx, y1, wz+1, sideUv[0], sideUv[1], sideLight); vertCount += 7;
-                            addVert(vertices, vertCount, wx, y0, wz+1, sideUv[0], sideUv[3], sideLight); vertCount += 7;
-                            addVert(vertices, vertCount, wx+1, y0, wz+1, sideUv[2], sideUv[3], sideLight); vertCount += 7;
-                            addVert(vertices, vertCount, wx+1, y1, wz+1, sideUv[2], sideUv[1], sideLight); vertCount += 7;
+                            addVert(vertices, vertCount, wx, y1, wz+1, sideUv[0], sideUv[1], sideLight); vertCount += 8;
+                            addVert(vertices, vertCount, wx, y0, wz+1, sideUv[0], sideUv[3], sideLight); vertCount += 8;
+                            addVert(vertices, vertCount, wx+1, y0, wz+1, sideUv[2], sideUv[3], sideLight); vertCount += 8;
+                            addVert(vertices, vertCount, wx+1, y1, wz+1, sideUv[2], sideUv[1], sideLight); vertCount += 8;
                         } else { // -Z
-                            addVert(vertices, vertCount, wx+1, y1, wz, sideUv[0], sideUv[1], sideLight); vertCount += 7;
-                            addVert(vertices, vertCount, wx+1, y0, wz, sideUv[0], sideUv[3], sideLight); vertCount += 7;
-                            addVert(vertices, vertCount, wx, y0, wz, sideUv[2], sideUv[3], sideLight); vertCount += 7;
-                            addVert(vertices, vertCount, wx, y1, wz, sideUv[2], sideUv[1], sideLight); vertCount += 7;
+                            addVert(vertices, vertCount, wx+1, y1, wz, sideUv[0], sideUv[1], sideLight); vertCount += 8;
+                            addVert(vertices, vertCount, wx+1, y0, wz, sideUv[0], sideUv[3], sideLight); vertCount += 8;
+                            addVert(vertices, vertCount, wx, y0, wz, sideUv[2], sideUv[3], sideLight); vertCount += 8;
+                            addVert(vertices, vertCount, wx, y1, wz, sideUv[2], sideUv[1], sideLight); vertCount += 8;
                         }
                         idxCount = addQuadIdx(indices, idxCount, baseVert);
                     }
@@ -330,15 +333,15 @@ public class LODMesher {
         float wz = chunk.getPos().worldZ();
         float size = WorldConstants.CHUNK_SIZE;
 
-        float[] vertices = new float[4 * 7];
+        float[] vertices = new float[4 * 8]; // 8 floats per vertex
         int vc = 0;
         float light = 0.9f;
 
         // Four corners of chunk, at average height
-        addVert(vertices, vc, wx, avgHeight, wz, uv[0], uv[1], light); vc += 7;
-        addVert(vertices, vc, wx, avgHeight, wz + size, uv[0], uv[3], light); vc += 7;
-        addVert(vertices, vc, wx + size, avgHeight, wz + size, uv[2], uv[3], light); vc += 7;
-        addVert(vertices, vc, wx + size, avgHeight, wz, uv[2], uv[1], light); vc += 7;
+        addVert(vertices, vc, wx, avgHeight, wz, uv[0], uv[1], light); vc += 8;
+        addVert(vertices, vc, wx, avgHeight, wz + size, uv[0], uv[3], light); vc += 8;
+        addVert(vertices, vc, wx + size, avgHeight, wz + size, uv[2], uv[3], light); vc += 8;
+        addVert(vertices, vc, wx + size, avgHeight, wz, uv[2], uv[1], light); vc += 8;
 
         int[] indices = {0, 1, 2, 0, 2, 3};
 
@@ -369,6 +372,7 @@ public class LODMesher {
         arr[offset + 4] = v;
         arr[offset + 5] = skyVisibility; // sky visibility for shader
         arr[offset + 6] = 0.0f;          // blockLight (unused for LOD meshes)
+        arr[offset + 7] = 0.3f;          // horizonWeight (balanced default for LOD)
     }
 
     private int addQuadIdx(int[] arr, int offset, int baseVert) {

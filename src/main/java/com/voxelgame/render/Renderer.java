@@ -25,6 +25,11 @@ import static org.lwjgl.opengl.GL33.*;
  * Uses two passes:
  *   1. Opaque pass  — depth write ON, blend OFF
  *   2. Transparent pass — depth write OFF, blend ON (water, etc.)
+ *
+ * Phase 2 Sky System:
+ * - Zenith/horizon color split for atmospheric depth
+ * - Time-of-day intensity curves (dark nights)
+ * - Sun direction and color
  */
 public class Renderer {
 
@@ -35,16 +40,31 @@ public class Renderer {
     private Frustum frustum;
     private final World world;
 
+    /** Sky system for zenith/horizon colors and intensity curves. */
+    private final SkySystem skySystem = new SkySystem();
+
     /** Current sun brightness for time-of-day lighting. Updated each frame. */
     private float sunBrightness = 1.0f;
 
-    /** Current fog/sky color. Updated each frame from WorldTime. */
+    /** Current fog/sky color. Updated each frame from SkySystem. */
     private float[] fogColor = {0.53f, 0.68f, 0.90f};
     
-    /** Current sun direction vector. Updated each frame from WorldTime. */
+    /** Current zenith (overhead) sky color. */
+    private float[] zenithColor = {0.30f, 0.50f, 0.90f};
+    
+    /** Current horizon sky color. */
+    private float[] horizonColor = {0.60f, 0.80f, 1.00f};
+    
+    /** Current sky intensity multiplier. */
+    private float skyIntensity = 1.0f;
+    
+    /** Current sun direction vector. Updated each frame from SkySystem. */
     private float[] sunDirection = {0.0f, 1.0f, 0.0f};
     
-    /** Current sun intensity for directional lighting. Updated each frame from WorldTime. */
+    /** Current sun color. */
+    private float[] sunColor = {1.0f, 0.98f, 0.90f};
+    
+    /** Current sun intensity for directional lighting. Updated each frame from SkySystem. */
     private float sunIntensity = 1.0f;
 
     /** LOD configuration — controls fog distances. May be null if LOD not initialized. */
@@ -70,14 +90,35 @@ public class Renderer {
         this.lodConfig = lodConfig;
     }
 
-    /** Update sun brightness, fog color, sun direction, and sun intensity from world time. Call once per frame. */
+    /** 
+     * Update lighting from world time using SkySystem. Call once per frame.
+     * 
+     * Uses Phase 2 SkySystem for:
+     * - Zenith/horizon color split
+     * - Smooth intensity curves (dark nights)
+     * - Sun direction, color, and intensity
+     */
     public void updateLighting(WorldTime worldTime) {
-        if (worldTime != null) {
-            this.sunBrightness = worldTime.getSunBrightness();
-            this.fogColor = worldTime.getSkyColor();
-            this.sunDirection = worldTime.getSunDirection();
-            this.sunIntensity = worldTime.getSunIntensity();
-        }
+        if (worldTime == null) return;
+        
+        // Convert WorldTime ticks to normalized time (0-1)
+        float normalizedTime = SkySystem.worldTimeToNormalized(worldTime.getWorldTick());
+        
+        // Update sky colors from SkySystem
+        this.zenithColor = skySystem.getZenithColor(normalizedTime);
+        this.horizonColor = skySystem.getHorizonColor(normalizedTime);
+        this.skyIntensity = skySystem.getSkyIntensity(normalizedTime);
+        
+        // Update sun from SkySystem
+        this.sunDirection = skySystem.getSunDirection(normalizedTime);
+        this.sunColor = skySystem.getSunColor(normalizedTime);
+        this.sunIntensity = skySystem.getSunIntensity(normalizedTime);
+        
+        // Fog color is a blend of zenith and horizon
+        this.fogColor = skySystem.getFogColor(normalizedTime);
+        
+        // Keep sunBrightness for legacy/backward compatibility
+        this.sunBrightness = worldTime.getSunBrightness();
     }
 
     public void render(Camera camera, int windowWidth, int windowHeight) {
@@ -116,21 +157,23 @@ public class Renderer {
         blockShader.setMat4("uView", view);
         blockShader.setInt("uAtlas", 0);
         blockShader.setFloat("uSunBrightness", sunBrightness);
-        blockShader.setVec3("uSunDirection", sunDirection[0], sunDirection[1], sunDirection[2]);
-        blockShader.setFloat("uSunIntensity", sunIntensity);
         blockShader.setVec3("uCameraPos", camera.getPosition());
         blockShader.setVec3("uFogColor", fogColor[0], fogColor[1], fogColor[2]);
         blockShader.setFloat("uFogStart", fogStart);
         blockShader.setFloat("uFogEnd", fogEnd);
         
-        // Unified lighting uniforms - sky color for shader-side RGB computation
-        // Use fog color as sky color (they're derived from the same source in WorldTime)
-        blockShader.setVec3("uSkyColor", fogColor[0], fogColor[1], fogColor[2]);
-        // Sky intensity: modulate based on sun brightness (brighter sky during day)
-        // At midday (sunBrightness=0.65): skyIntensity ~0.4
-        // At night (sunBrightness=0.05): skyIntensity ~0.05
-        float skyIntensity = 0.1f + sunBrightness * 0.5f;
+        // Phase 2 Sky System uniforms - zenith/horizon color split
+        blockShader.setVec3("uSkyZenithColor", zenithColor[0], zenithColor[1], zenithColor[2]);
+        blockShader.setVec3("uSkyHorizonColor", horizonColor[0], horizonColor[1], horizonColor[2]);
         blockShader.setFloat("uSkyIntensity", skyIntensity);
+        
+        // Sun uniforms
+        blockShader.setVec3("uSunDirection", sunDirection[0], sunDirection[1], sunDirection[2]);
+        blockShader.setVec3("uSunColor", sunColor[0], sunColor[1], sunColor[2]);
+        blockShader.setFloat("uSunIntensity", sunIntensity);
+        
+        // Legacy: keep uSkyColor for backward compatibility (use fog color)
+        blockShader.setVec3("uSkyColor", fogColor[0], fogColor[1], fogColor[2]);
 
         atlas.bind(0);
 
