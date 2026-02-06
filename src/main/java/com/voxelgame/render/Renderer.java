@@ -81,6 +81,12 @@ public class Renderer {
     /** Phase 4: Game time in seconds for torch flicker animation. */
     private float gameTime = 0.0f;
 
+    /** Phase 6: Smooth lighting toggle (true = interpolated, false = flat per-face). */
+    private boolean smoothLighting = true;
+
+    /** Phase 6: Current normalized time of day for fog density calculation. */
+    private float currentTimeOfDay = 0.5f;
+
     // ---- Render stats ----
     private int renderedChunks;
     private int culledChunks;
@@ -110,6 +116,22 @@ public class Renderer {
         this.gameTime = time;
     }
 
+    /** Phase 6: Toggle smooth lighting mode. */
+    public void toggleSmoothLighting() {
+        this.smoothLighting = !this.smoothLighting;
+        System.out.println("[Renderer] Smooth lighting: " + (smoothLighting ? "ON" : "OFF"));
+    }
+
+    /** Phase 6: Get current smooth lighting state. */
+    public boolean isSmoothLighting() {
+        return smoothLighting;
+    }
+
+    /** Phase 6: Set smooth lighting state. */
+    public void setSmoothLighting(boolean enabled) {
+        this.smoothLighting = enabled;
+    }
+
     /** 
      * Update lighting from world time using SkySystem. Call once per frame.
      * 
@@ -117,12 +139,19 @@ public class Renderer {
      * - Zenith/horizon color split
      * - Smooth intensity curves (dark nights)
      * - Sun direction, color, and intensity
+     * 
+     * Phase 6 additions:
+     * - Dynamic fog color matching horizon
+     * - Time-of-day fog density
      */
     public void updateLighting(WorldTime worldTime) {
         if (worldTime == null) return;
         
         // Convert WorldTime ticks to normalized time (0-1)
         float normalizedTime = SkySystem.worldTimeToNormalized(worldTime.getWorldTick());
+        
+        // Phase 6: Track current time for fog density calculation
+        this.currentTimeOfDay = normalizedTime;
         
         // Update sky colors from SkySystem
         this.zenithColor = skySystem.getZenithColor(normalizedTime);
@@ -134,7 +163,7 @@ public class Renderer {
         this.sunColor = skySystem.getSunColor(normalizedTime);
         this.sunIntensity = skySystem.getSunIntensity(normalizedTime);
         
-        // Fog color is a blend of zenith and horizon
+        // Phase 6: Fog color matches horizon (seamless blend to sky at distance)
         this.fogColor = skySystem.getFogColor(normalizedTime);
         
         // Keep sunBrightness for legacy/backward compatibility
@@ -155,14 +184,22 @@ public class Renderer {
         frustum.update(projView);
 
         // Compute fog distances from LOD config
-        float fogStart, fogEnd;
+        // Phase 6: Apply dynamic fog density based on time of day
+        float baseFogStart, baseFogEnd;
         if (lodConfig != null) {
-            fogStart = lodConfig.getFogStart();
-            fogEnd = lodConfig.getFogEnd();
+            baseFogStart = lodConfig.getFogStart();
+            baseFogEnd = lodConfig.getFogEnd();
         } else {
-            fogStart = 80.0f;
-            fogEnd = 128.0f;
+            baseFogStart = 80.0f;
+            baseFogEnd = 128.0f;
         }
+        
+        // Phase 6: Dynamic fog density - multiply distances by density factor
+        // Lower density = denser fog = shorter distances
+        // Higher density = thinner fog = longer distances
+        float fogDensity = skySystem.getFogDensity(currentTimeOfDay);
+        float fogStart = baseFogStart * fogDensity;
+        float fogEnd = baseFogEnd * fogDensity;
 
         // Pre-compute distance culling threshold (in chunk coordinates)
         // Chunks beyond maxRenderDistance + 1 are fully fogged and don't need rendering
@@ -205,6 +242,9 @@ public class Renderer {
         
         // Phase 4: Pass game time for torch flicker animation
         blockShader.setFloat("uTime", gameTime);
+        
+        // Phase 6: Smooth lighting toggle (1 = smooth interpolated, 0 = flat per-face)
+        blockShader.setInt("uSmoothLighting", smoothLighting ? 1 : 0);
         
         // Phase 5: Shadow map uniforms
         if (shadowRenderer != null && shadowRenderer.isShadowsEnabled()) {

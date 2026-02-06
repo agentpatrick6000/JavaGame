@@ -115,21 +115,31 @@ public class DebugOverlay {
 
     /** Backward-compatible overload (no entity counts or time). */
     public void render(Player player, World world, int fps, int screenW, int screenH, boolean sprinting) {
-        render(player, world, fps, screenW, screenH, sprinting, 0, 0, "", null, 0, 0);
+        render(player, world, fps, screenW, screenH, sprinting, 0, 0, "", null, 0, 0, true);
     }
 
     /** Backward-compatible overload (no LOD stats). */
     public void render(Player player, World world, int fps, int screenW, int screenH,
                        boolean sprinting, int itemEntityCount, int mobCount, String worldTimeStr) {
-        render(player, world, fps, screenW, screenH, sprinting, itemEntityCount, mobCount, worldTimeStr, null, 0, 0);
+        render(player, world, fps, screenW, screenH, sprinting, itemEntityCount, mobCount, worldTimeStr, null, 0, 0, true);
     }
 
-    /**
-     * Render debug text overlay with LOD stats.
-     */
+    /** Backward-compatible overload (no smooth lighting info). */
     public void render(Player player, World world, int fps, int screenW, int screenH,
                        boolean sprinting, int itemEntityCount, int mobCount, String worldTimeStr,
                        ChunkManager chunkManager, int renderedChunks, int culledChunks) {
+        render(player, world, fps, screenW, screenH, sprinting, itemEntityCount, mobCount, worldTimeStr,
+               chunkManager, renderedChunks, culledChunks, true);
+    }
+
+    /**
+     * Render debug text overlay with LOD stats and smooth lighting info.
+     * Phase 6: Added smoothLighting parameter.
+     */
+    public void render(Player player, World world, int fps, int screenW, int screenH,
+                       boolean sprinting, int itemEntityCount, int mobCount, String worldTimeStr,
+                       ChunkManager chunkManager, int renderedChunks, int culledChunks,
+                       boolean smoothLighting) {
         if (mode == DisplayMode.OFF) return;
 
         // Update scale based on window size
@@ -159,6 +169,10 @@ public class DebugOverlay {
             sprinting ? "Y" : "N"));
         lines.add(String.format("Mode: %s  HP: %.0f/%.0f",
             player.getGameMode(), player.getHealth(), player.getMaxHealth()));
+        
+        // Phase 6: Show lighting mode
+        lines.add(String.format("Lighting: %s (F6 to toggle)",
+            smoothLighting ? "Smooth" : "Sharp"));
 
         // === CHUNK INFO (BASIC_CHUNKS and BASIC_CHUNKS_PROFILER) ===
         if (mode == DisplayMode.BASIC_CHUNKS || mode == DisplayMode.BASIC_CHUNKS_PROFILER) {

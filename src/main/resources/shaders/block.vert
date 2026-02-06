@@ -16,6 +16,7 @@ uniform vec3 uCameraPos;
 uniform float uFogStart;
 uniform float uFogEnd;
 
+// Smooth (interpolated) outputs
 out vec2 vTexCoord;
 out float vSkyVisibility;
 out vec3 vBlockLightRGB;   // Phase 4: RGB block light passed to fragment
@@ -25,22 +26,43 @@ out float vFogFactor;
 out vec3 vViewPos;   // view-space position (for SSAO)
 out vec3 vWorldPos;  // world-space position (for directional lighting + flicker)
 
+// Phase 6: Flat (non-interpolated) outputs for sharp lighting mode
+// These provide per-face uniform lighting (classic Minecraft look)
+flat out float fSkyVisibility;
+flat out vec3 fBlockLightRGB;
+flat out float fHorizonWeight;
+flat out vec3 fIndirectRGB;
+
 void main() {
     vec4 viewPos4 = uView * vec4(aPos, 1.0);
     gl_Position = uProjection * viewPos4;
     vTexCoord = aTexCoord;
-    vSkyVisibility = aSkyVisibility;
     
-    // Phase 4: Pass RGB block light directly
-    // If G and B are 0 but R > 0, this is a legacy mesh — apply warm color in fragment
-    vBlockLightRGB = vec3(aBlockLightR, aBlockLightG, aBlockLightB);
+    // Compute lighting values
+    float skyVis = aSkyVisibility;
+    vec3 blockRGB = vec3(aBlockLightR, aBlockLightG, aBlockLightB);
+    float horizonWt = aHorizonWeight;
+    vec3 indirectRGB = vec3(aIndirectR, aIndirectG, aIndirectB);
     
-    vHorizonWeight = aHorizonWeight;
-    vIndirectRGB = vec3(aIndirectR, aIndirectG, aIndirectB);
+    // Smooth (interpolated) outputs
+    vSkyVisibility = skyVis;
+    vBlockLightRGB = blockRGB;
+    vHorizonWeight = horizonWt;
+    vIndirectRGB = indirectRGB;
+    
+    // Phase 6: Flat (non-interpolated) outputs for sharp lighting mode
+    // The 'flat' qualifier means only the provoking vertex value is used,
+    // giving uniform lighting across the entire face (classic blocky look)
+    fSkyVisibility = skyVis;
+    fBlockLightRGB = blockRGB;
+    fHorizonWeight = horizonWt;
+    fIndirectRGB = indirectRGB;
+    
     vViewPos = viewPos4.xyz;
     vWorldPos = aPos;  // Pass world position for normal calculation + flicker in fragment
 
     // Distance-based fog (linear, using dynamic uniforms from LOD config)
+    // Phase 6: Fog distances are now dynamic based on time of day
     float dist = length(aPos - uCameraPos);
     vFogFactor = clamp((dist - uFogStart) / (uFogEnd - uFogStart), 0.0, 1.0);
 }

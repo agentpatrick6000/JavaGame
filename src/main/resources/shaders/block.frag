@@ -1,4 +1,6 @@
 #version 330 core
+
+// Smooth (interpolated) inputs
 in vec2 vTexCoord;
 in float vSkyVisibility;   // 0-1 sky visibility (with AO and directional baked in)
 in vec3 vBlockLightRGB;    // Phase 4: RGB block light (colored torch/lava/etc.)
@@ -7,6 +9,12 @@ in vec3 vIndirectRGB;      // Phase 3: indirect lighting from probes
 in float vFogFactor;
 in vec3 vViewPos;
 in vec3 vWorldPos;
+
+// Phase 6: Flat (non-interpolated) inputs for sharp lighting mode
+flat in float fSkyVisibility;
+flat in vec3 fBlockLightRGB;
+flat in float fHorizonWeight;
+flat in vec3 fIndirectRGB;
 
 uniform sampler2D uAtlas;
 uniform float uAlpha;           // 1.0 for opaque pass, <1.0 for transparent pass
@@ -24,6 +32,9 @@ uniform float uSunIntensity;    // Sun intensity (1.0 at noon, 0.0 at night)
 
 // Phase 4: Time uniform for torch flicker
 uniform float uTime;            // Game time in seconds (for flicker animation)
+
+// Phase 6: Smooth lighting toggle (1 = smooth interpolated, 0 = flat per-face)
+uniform int uSmoothLighting;
 
 // Legacy uniforms (kept for backward compatibility)
 uniform vec3 uSkyColor;         // Fog/ambient sky color
@@ -147,14 +158,25 @@ void main() {
     vec3 worldNormal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
 
     // ========================================================================
+    // PHASE 6: SELECT SMOOTH OR FLAT LIGHTING INPUTS
+    // ========================================================================
+    // Smooth lighting: per-vertex interpolated values (gradients across faces)
+    // Sharp lighting: flat per-face values (uniform color per face, classic look)
+    
+    float skyVis = (uSmoothLighting == 1) ? vSkyVisibility : fSkyVisibility;
+    vec3 blockLightIn = (uSmoothLighting == 1) ? vBlockLightRGB : fBlockLightRGB;
+    float horizonWt = (uSmoothLighting == 1) ? vHorizonWeight : fHorizonWeight;
+    vec3 indirectIn = (uSmoothLighting == 1) ? vIndirectRGB : fIndirectRGB;
+
+    // ========================================================================
     // PHASE 4 UNIFIED RGB LIGHTING MODEL
     // ========================================================================
     
     // 1. SKY LIGHT: Mix zenith and horizon colors based on what's visible
     //    Under overhangs: horizonWeight = 1.0 → mostly horizon color (warm at sunset)
     //    Open sky: horizonWeight = 0.3 → mix of both (natural balance)
-    vec3 skyColor = mix(uSkyZenithColor, uSkyHorizonColor, vHorizonWeight);
-    vec3 skyRGB = skyColor * vSkyVisibility * uSkyIntensity;
+    vec3 skyColor = mix(uSkyZenithColor, uSkyHorizonColor, horizonWt);
+    vec3 skyRGB = skyColor * skyVis * uSkyIntensity;
     
     // 2. SUN LIGHT: Directional sunlight (N·L), only for sky-visible surfaces
     //    Surfaces in caves (visibility=0) don't get any sun contribution
@@ -162,16 +184,16 @@ void main() {
     //    Phase 5: Apply shadow mapping to sun contribution
     float NdotL = max(dot(worldNormal, uSunDirection), 0.0);
     float shadow = calculateShadow(vWorldPos, worldNormal);
-    vec3 sunRGB = uSunColor * NdotL * uSunIntensity * vSkyVisibility * shadow * 0.6;
+    vec3 sunRGB = uSunColor * NdotL * uSunIntensity * skyVis * shadow * 0.6;
     
     // 3. BLOCK LIGHT: Phase 4 RGB light from colored sources
     //    Torches = warm orange, lava = deep red, redstone = dim red
-    vec3 blockRGB = vBlockLightRGB;
+    vec3 blockRGB = blockLightIn;
     
     // Legacy compatibility: if G and B are 0 but R > 0, apply warm color
     // This handles old meshes that haven't been regenerated yet
-    if (vBlockLightRGB.g < 0.001 && vBlockLightRGB.b < 0.001 && vBlockLightRGB.r > 0.001) {
-        blockRGB = LEGACY_BLOCK_LIGHT_COLOR * vBlockLightRGB.r;
+    if (blockLightIn.g < 0.001 && blockLightIn.b < 0.001 && blockLightIn.r > 0.001) {
+        blockRGB = LEGACY_BLOCK_LIGHT_COLOR * blockLightIn.r;
     }
     
     // Apply subtle flicker for torch-lit surfaces
@@ -185,7 +207,7 @@ void main() {
     //    - Under trees: slight green tint from grass
     //    - Near torches: warm bounce on nearby walls
     //    - Under mountains at sunset: faint warm tones from horizon light
-    vec3 indirectRGB = vIndirectRGB * INDIRECT_STRENGTH;
+    vec3 indirectRGB = indirectIn * INDIRECT_STRENGTH;
     
     // 5. ADDITIVE COMBINATION (not max!)
     //    This allows torches to add to moonlight, multiple light sources to stack
@@ -212,8 +234,20 @@ void main() {
     // Apply lighting to texture
     vec3 litColor = texColor.rgb * totalLight;
 
-    // Apply distance fog (blends to sky color, hides chunk pop-in)
-    vec3 finalColor = mix(litColor, uFogColor, vFogFactor);
+    // ========================================================================
+    // PHASE 6: ENHANCED FOG WITH HEIGHT COMPONENT
+    // ========================================================================
+    // Distance fog (blends to sky color, hides chunk pop-in)
+    // Combined with subtle height-based fog for morning mist effect
+    
+    // Height fog: denser near sea level (Y=64), thinner at height
+    // exp(-y * k) gives exponential falloff with height
+    float heightFogFactor = exp(-max(vWorldPos.y - 64.0, 0.0) * 0.015);
+    
+    // Combine distance fog with height fog (height fog is subtle, max 30% contribution)
+    float combinedFog = max(vFogFactor, heightFogFactor * 0.3);
+    
+    vec3 finalColor = mix(litColor, uFogColor, combinedFog);
 
     fragColor = vec4(finalColor, texColor.a * uAlpha);
 

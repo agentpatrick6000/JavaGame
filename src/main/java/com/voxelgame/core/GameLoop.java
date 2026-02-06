@@ -898,6 +898,11 @@ public class GameLoop {
         if (Input.isKeyPressed(GLFW_KEY_F3)) {
             debugOverlay.toggle();
         }
+        
+        // Phase 6: Handle smooth lighting toggle (F6)
+        if (Input.isKeyPressed(GLFW_KEY_F6)) {
+            renderer.toggleSmoothLighting();
+        }
 
         // Handle respawn (R key when dead)
         if (player.isDead() && Input.isKeyPressed(GLFW_KEY_R)) {
@@ -1197,7 +1202,8 @@ public class GameLoop {
         debugOverlay.render(player, world, time.getFps(), w, h, controller.isSprinting(),
                 itemEntityManager.getItemCount(), entityManager.getEntityCount(),
                 worldTime.getTimeString(), chunkManager,
-                renderer.getRenderedChunks(), renderer.getCulledChunks());
+                renderer.getRenderedChunks(), renderer.getCulledChunks(),
+                renderer.isSmoothLighting());
         profiler.end("UI");
 
         if (inventoryScreen.isVisible()) {

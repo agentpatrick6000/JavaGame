@@ -275,6 +275,64 @@ public class SkySystem {
         };
     }
 
+    /**
+     * Get fog density multiplier based on time of day.
+     * Phase 6: Dynamic fog density for atmospheric effects.
+     * 
+     * Lower values = denser fog (shorter visibility)
+     * Higher values = thinner fog (longer visibility)
+     * 
+     * @param timeOfDay Normalized time 0-1
+     * @return Density multiplier (0.6 - 1.3)
+     */
+    public float getFogDensity(float timeOfDay) {
+        float t = normalizeTime(timeOfDay);
+        
+        // Sunset/sunrise: denser fog for atmospheric golden hour (0.7x = 30% closer)
+        float sunriseWeight = transitionWeight(t, T_SUNRISE, TRANSITION_WIDTH * 1.5f);
+        float sunsetWeight = transitionWeight(t, T_SUNSET, TRANSITION_WIDTH * 1.5f);
+        float goldenHourWeight = Math.max(sunriseWeight, sunsetWeight);
+        
+        // Night: slightly thinner fog to see stars/distance (1.2x = 20% further)
+        boolean isNight = t < T_SUNRISE - TRANSITION_WIDTH || t > T_SUNSET + TRANSITION_WIDTH;
+        
+        if (isNight) {
+            // Night: thin fog, can see further
+            return 1.2f;
+        } else if (goldenHourWeight > 0.1f) {
+            // Golden hour: denser, atmospheric fog
+            // Interpolate from 1.0 (normal) to 0.7 (dense) based on golden hour intensity
+            return lerp(1.0f, 0.7f, goldenHourWeight);
+        } else {
+            // Normal daytime: standard fog
+            return 1.0f;
+        }
+    }
+
+    /**
+     * Check if current time is night (for external use).
+     * 
+     * @param timeOfDay Normalized time 0-1
+     * @return true if it's night time
+     */
+    public boolean isNight(float timeOfDay) {
+        float t = normalizeTime(timeOfDay);
+        return t < T_SUNRISE - TRANSITION_WIDTH || t > T_SUNSET + TRANSITION_WIDTH;
+    }
+
+    /**
+     * Check if current time is sunset or sunrise (golden hour).
+     * 
+     * @param timeOfDay Normalized time 0-1
+     * @return true if in golden hour transition
+     */
+    public boolean isGoldenHour(float timeOfDay) {
+        float t = normalizeTime(timeOfDay);
+        float sunriseWeight = transitionWeight(t, T_SUNRISE, TRANSITION_WIDTH * 1.5f);
+        float sunsetWeight = transitionWeight(t, T_SUNSET, TRANSITION_WIDTH * 1.5f);
+        return sunriseWeight > 0.3f || sunsetWeight > 0.3f;
+    }
+
     // ========================================================================
     // INTERPOLATION HELPERS
     // ========================================================================
