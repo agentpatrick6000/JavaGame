@@ -70,6 +70,9 @@ public class Renderer {
     /** LOD configuration — controls fog distances. May be null if LOD not initialized. */
     private LODConfig lodConfig;
 
+    /** Phase 4: Game time in seconds for torch flicker animation. */
+    private float gameTime = 0.0f;
+
     // ---- Render stats ----
     private int renderedChunks;
     private int culledChunks;
@@ -88,6 +91,11 @@ public class Renderer {
     /** Set the LOD config for dynamic fog distances. */
     public void setLodConfig(LODConfig lodConfig) {
         this.lodConfig = lodConfig;
+    }
+
+    /** Phase 4: Set the game time for torch flicker animation. */
+    public void setGameTime(float time) {
+        this.gameTime = time;
     }
 
     /** 
@@ -174,6 +182,9 @@ public class Renderer {
         
         // Legacy: keep uSkyColor for backward compatibility (use fog color)
         blockShader.setVec3("uSkyColor", fogColor[0], fogColor[1], fogColor[2]);
+        
+        // Phase 4: Pass game time for torch flicker animation
+        blockShader.setFloat("uTime", gameTime);
 
         atlas.bind(0);
 

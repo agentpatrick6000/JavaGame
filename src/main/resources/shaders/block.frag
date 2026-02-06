@@ -1,7 +1,7 @@
 #version 330 core
 in vec2 vTexCoord;
 in float vSkyVisibility;   // 0-1 sky visibility (with AO and directional baked in)
-in float vBlockLight;      // 0-1 block light (with AO and directional baked in)
+in vec3 vBlockLightRGB;    // Phase 4: RGB block light (colored torch/lava/etc.)
 in float vHorizonWeight;   // 0-1 how much horizon vs zenith is visible (Phase 2)
 in vec3 vIndirectRGB;      // Phase 3: indirect lighting from probes
 in float vFogFactor;
@@ -22,12 +22,12 @@ uniform vec3 uSunDirection;     // Direction TO sun (normalized)
 uniform vec3 uSunColor;         // Sun color (warm white at noon, orange at sunset)
 uniform float uSunIntensity;    // Sun intensity (1.0 at noon, 0.0 at night)
 
+// Phase 4: Time uniform for torch flicker
+uniform float uTime;            // Game time in seconds (for flicker animation)
+
 // Legacy uniforms (kept for backward compatibility)
 uniform vec3 uSkyColor;         // Fog/ambient sky color
 uniform float uSunBrightness;   // Overall sun brightness (0-1)
-
-// Block light color (warm torch glow)
-const vec3 BLOCK_LIGHT_COLOR = vec3(1.0, 0.9, 0.7);
 
 // Minimum ambient light (starlight) so caves aren't completely pitch black
 const float MIN_AMBIENT = 0.015;
@@ -35,8 +35,22 @@ const float MIN_AMBIENT = 0.015;
 // Phase 3: Indirect light strength (controls how much probe bounce contributes)
 const float INDIRECT_STRENGTH = 0.5;
 
+// Phase 4: Legacy warm color for backward compatibility (when G/B = 0)
+const vec3 LEGACY_BLOCK_LIGHT_COLOR = vec3(1.0, 0.9, 0.7);
+
 layout(location = 0) out vec4 fragColor;
 layout(location = 1) out vec4 fragNormal; // View-space normals for SSAO (PostFX FBO)
+
+// Phase 4: Subtle flicker function for torch-lit surfaces
+// Uses procedural noise based on world position + time
+float flickerAmount(vec3 worldPos) {
+    // Multiple frequencies for organic feel
+    float noise1 = fract(sin(dot(worldPos.xz, vec2(12.9898, 78.233)) + uTime * 4.0) * 43758.5453);
+    float noise2 = fract(sin(dot(worldPos.xz, vec2(93.9898, 67.345)) + uTime * 7.0) * 28461.8742);
+    float combined = noise1 * 0.6 + noise2 * 0.4;
+    // Subtle flicker: 0.92 - 1.0 range (8% variation max)
+    return 0.92 + 0.08 * combined;
+}
 
 void main() {
     vec4 texColor = texture(uAtlas, vTexCoord);
@@ -46,7 +60,7 @@ void main() {
     vec3 worldNormal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
 
     // ========================================================================
-    // PHASE 3 UNIFIED RGB LIGHTING MODEL
+    // PHASE 4 UNIFIED RGB LIGHTING MODEL
     // ========================================================================
     
     // 1. SKY LIGHT: Mix zenith and horizon colors based on what's visible
@@ -61,9 +75,21 @@ void main() {
     float NdotL = max(dot(worldNormal, uSunDirection), 0.0);
     vec3 sunRGB = uSunColor * NdotL * uSunIntensity * vSkyVisibility * 0.6;
     
-    // 3. BLOCK LIGHT: Warm light from torches and other emissive blocks
-    //    Always active regardless of sky visibility or time of day
-    vec3 blockRGB = BLOCK_LIGHT_COLOR * vBlockLight;
+    // 3. BLOCK LIGHT: Phase 4 RGB light from colored sources
+    //    Torches = warm orange, lava = deep red, redstone = dim red
+    vec3 blockRGB = vBlockLightRGB;
+    
+    // Legacy compatibility: if G and B are 0 but R > 0, apply warm color
+    // This handles old meshes that haven't been regenerated yet
+    if (vBlockLightRGB.g < 0.001 && vBlockLightRGB.b < 0.001 && vBlockLightRGB.r > 0.001) {
+        blockRGB = LEGACY_BLOCK_LIGHT_COLOR * vBlockLightRGB.r;
+    }
+    
+    // Apply subtle flicker for torch-lit surfaces
+    // Only flicker if there's significant block light (avoids flickering dark areas)
+    if (length(blockRGB) > 0.05) {
+        blockRGB *= flickerAmount(vWorldPos);
+    }
     
     // 4. INDIRECT LIGHT (Phase 3): One-bounce GI from irradiance probes
     //    This adds subtle color bleed from nearby lit surfaces into shadows
@@ -85,10 +111,12 @@ void main() {
     // ========================================================================
     // When sky intensity is low (night), add a subtle blue tint to the lighting
     // This simulates the way our eyes perceive colors at night (rod cells)
+    // But only for sky-lit surfaces — torch-lit areas stay warm
     if (uSkyIntensity < 0.3) {
         float nightFactor = 1.0 - uSkyIntensity / 0.3; // 0 at dusk, 1 at full night
         // Shift toward blue, but don't overpower torch light or indirect light
-        float blendStrength = nightFactor * 0.3 * (1.0 - vBlockLight) * (1.0 - length(indirectRGB));
+        float blockInfluence = length(blockRGB);
+        float blendStrength = nightFactor * 0.3 * (1.0 - min(blockInfluence, 1.0)) * (1.0 - length(indirectRGB));
         totalLight = mix(totalLight, totalLight * vec3(0.7, 0.75, 1.0), blendStrength);
     }
 

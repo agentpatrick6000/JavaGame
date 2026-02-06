@@ -175,46 +175,63 @@ public class Lighting {
     }
 
     // ========================================================================
-    // BLOCK LIGHT SYSTEM - BFS propagation (unchanged from original)
+    // BLOCK LIGHT SYSTEM - Phase 4: RGB propagation with nonlinear falloff
     // ========================================================================
+    
+    /** Nonlinear falloff factor: multiply by this each block traveled. */
+    private static final float RGB_FALLOFF = 0.8f;
+    
+    /** Minimum light value to continue propagation (avoids infinite spread). */
+    private static final float RGB_MIN_THRESHOLD = 0.01f;
 
     /**
-     * Compute initial block light for a newly generated chunk.
-     * Scans for light-emitting blocks and propagates from them.
+     * Compute initial RGB block light for a newly generated chunk.
+     * Scans for light-emitting blocks and propagates colored light from them.
+     * Phase 4: Uses RGB values with nonlinear falloff instead of scalar 0-15.
      */
     public static void computeInitialBlockLight(Chunk chunk, World world) {
         ChunkPos cPos = chunk.getPos();
         int cx = cPos.x() * WorldConstants.CHUNK_SIZE;
         int cz = cPos.z() * WorldConstants.CHUNK_SIZE;
 
+        // Clear existing RGB light in this chunk
+        chunk.clearBlockLightRGB();
+        
+        // Queue stores: [wx, wy, wz, Float.floatToIntBits(r), Float.floatToIntBits(g), Float.floatToIntBits(b)]
         Queue<long[]> bfsQueue = new ArrayDeque<>();
 
         for (int x = 0; x < WorldConstants.CHUNK_SIZE; x++) {
             for (int z = 0; z < WorldConstants.CHUNK_SIZE; z++) {
                 for (int y = 0; y < WorldConstants.WORLD_HEIGHT; y++) {
                     int blockId = chunk.getBlock(x, y, z);
-                    int emission = Blocks.getLightEmission(blockId);
-                    if (emission > 0) {
-                        chunk.setBlockLight(x, y, z, emission);
-                        bfsQueue.add(new long[]{cx + x, y, cz + z, emission});
+                    float[] lightColor = LightEmitters.getLightColorRGB(blockId);
+                    if (lightColor != null) {
+                        chunk.setBlockLightRGB(x, y, z, lightColor[0], lightColor[1], lightColor[2]);
+                        bfsQueue.add(new long[]{cx + x, y, cz + z, 
+                            Float.floatToIntBits(lightColor[0]),
+                            Float.floatToIntBits(lightColor[1]),
+                            Float.floatToIntBits(lightColor[2])});
                     }
                 }
             }
         }
 
-        propagateBlockLightBFS(bfsQueue, world);
+        propagateBlockLightRGBBFS(bfsQueue, world);
     }
 
     /**
-     * BFS flood-fill block light propagation.
+     * BFS flood-fill RGB block light propagation with nonlinear falloff.
+     * Phase 4: Each channel attenuates by RGB_FALLOFF per block traveled.
      */
-    private static void propagateBlockLightBFS(Queue<long[]> queue, World world) {
+    private static void propagateBlockLightRGBBFS(Queue<long[]> queue, World world) {
         while (!queue.isEmpty()) {
             long[] entry = queue.poll();
             int wx = (int) entry[0];
             int wy = (int) entry[1];
             int wz = (int) entry[2];
-            int lightLevel = (int) entry[3];
+            float r = Float.intBitsToFloat((int) entry[3]);
+            float g = Float.intBitsToFloat((int) entry[4]);
+            float b = Float.intBitsToFloat((int) entry[5]);
 
             for (int[] dir : DIRS) {
                 int nx = wx + dir[0];
@@ -228,15 +245,28 @@ public class Lighting {
 
                 if (isOpaque(nBlock)) continue;
 
-                int reduction = getLightReduction(nBlock);
-                int newLight = lightLevel - 1 - reduction;
+                // Nonlinear falloff: multiply by RGB_FALLOFF
+                float extraReduction = getLightReductionFactor(nBlock);
+                float falloff = RGB_FALLOFF * extraReduction;
+                float nr = r * falloff;
+                float ng = g * falloff;
+                float nb = b * falloff;
 
-                if (newLight <= 0) continue;
+                // Stop if all channels are too dim
+                if (nr < RGB_MIN_THRESHOLD && ng < RGB_MIN_THRESHOLD && nb < RGB_MIN_THRESHOLD) continue;
 
-                int currentLight = world.getBlockLight(nx, ny, nz);
-                if (newLight > currentLight) {
-                    world.setBlockLight(nx, ny, nz, newLight);
-                    queue.add(new long[]{nx, ny, nz, newLight});
+                // Only update if we're brighter than current in any channel
+                float[] current = world.getBlockLightRGB(nx, ny, nz);
+                if (nr > current[0] || ng > current[1] || nb > current[2]) {
+                    // Take max of each channel (allows multiple colored lights to blend)
+                    float newR = Math.max(nr, current[0]);
+                    float newG = Math.max(ng, current[1]);
+                    float newB = Math.max(nb, current[2]);
+                    world.setBlockLightRGB(nx, ny, nz, newR, newG, newB);
+                    queue.add(new long[]{nx, ny, nz, 
+                        Float.floatToIntBits(nr),
+                        Float.floatToIntBits(ng),
+                        Float.floatToIntBits(nb)});
                 }
             }
         }
@@ -244,86 +274,91 @@ public class Lighting {
 
     /**
      * Add block light when a light-emitting block is placed (e.g., torch).
+     * Phase 4: Propagates RGB light with nonlinear falloff.
      */
     public static Set<ChunkPos> onLightSourcePlaced(World world, int wx, int wy, int wz) {
         Set<ChunkPos> affectedChunks = new HashSet<>();
         int blockId = world.getBlock(wx, wy, wz);
-        int emission = Blocks.getLightEmission(blockId);
-        if (emission <= 0) return affectedChunks;
+        float[] lightColor = LightEmitters.getLightColorRGB(blockId);
+        if (lightColor == null) return affectedChunks;
 
-        world.setBlockLight(wx, wy, wz, emission);
+        world.setBlockLightRGB(wx, wy, wz, lightColor[0], lightColor[1], lightColor[2]);
         addAffectedChunk(affectedChunks, wx, wy, wz);
 
         Queue<long[]> bfsQueue = new ArrayDeque<>();
-        bfsQueue.add(new long[]{wx, wy, wz, emission});
-        propagateBlockLightBFSTracked(bfsQueue, world, affectedChunks);
+        bfsQueue.add(new long[]{wx, wy, wz,
+            Float.floatToIntBits(lightColor[0]),
+            Float.floatToIntBits(lightColor[1]),
+            Float.floatToIntBits(lightColor[2])});
+        propagateBlockLightRGBBFSTracked(bfsQueue, world, affectedChunks);
 
         return affectedChunks;
     }
 
     /**
      * Remove block light when a light source is removed (e.g., torch broken).
+     * Phase 4: Clears RGB light and re-propagates from remaining sources.
      */
     public static Set<ChunkPos> onLightSourceRemoved(World world, int wx, int wy, int wz, int oldEmission) {
         Set<ChunkPos> affectedChunks = new HashSet<>();
         if (oldEmission <= 0) return affectedChunks;
 
-        // BFS removal: clear all light that originated from this source
-        Queue<long[]> removeQueue = new ArrayDeque<>();
+        // Calculate max radius that could have been affected
+        // With 0.8 falloff: 0.8^n < 0.01 means n > log(0.01)/log(0.8) ≈ 21 blocks
+        int maxRadius = 25;
+
+        // Clear light in affected area and collect light sources for re-propagation
         Queue<long[]> reproQueue = new ArrayDeque<>();
-        Set<Long> visited = new HashSet<>();
-
-        world.setBlockLight(wx, wy, wz, 0);
-        addAffectedChunk(affectedChunks, wx, wy, wz);
-        removeQueue.add(new long[]{wx, wy, wz, oldEmission});
-
-        while (!removeQueue.isEmpty()) {
-            long[] entry = removeQueue.poll();
-            int ex = (int) entry[0];
-            int ey = (int) entry[1];
-            int ez = (int) entry[2];
-            int oldLight = (int) entry[3];
-
-            for (int[] dir : DIRS) {
-                int nx = ex + dir[0];
-                int ny = ey + dir[1];
-                int nz = ez + dir[2];
-                if (ny < 0 || ny >= WorldConstants.WORLD_HEIGHT) continue;
-
-                long key = packPos(nx, ny, nz);
-                if (visited.contains(key)) continue;
-
-                int nBlockId = world.getBlock(nx, ny, nz);
-                if (isOpaque(Blocks.get(nBlockId))) continue;
-
-                int nLight = world.getBlockLight(nx, ny, nz);
-                if (nLight > 0 && nLight < oldLight) {
-                    world.setBlockLight(nx, ny, nz, 0);
-                    addAffectedChunk(affectedChunks, nx, ny, nz);
-                    visited.add(key);
-                    removeQueue.add(new long[]{nx, ny, nz, nLight});
-                } else if (nLight >= oldLight && nLight > 0) {
-                    reproQueue.add(new long[]{nx, ny, nz, nLight});
+        
+        for (int dx = -maxRadius; dx <= maxRadius; dx++) {
+            for (int dy = -maxRadius; dy <= maxRadius; dy++) {
+                for (int dz = -maxRadius; dz <= maxRadius; dz++) {
+                    int nx = wx + dx;
+                    int ny = wy + dy;
+                    int nz = wz + dz;
+                    
+                    if (ny < 0 || ny >= WorldConstants.WORLD_HEIGHT) continue;
+                    
+                    float[] rgb = world.getBlockLightRGB(nx, ny, nz);
+                    if (rgb[0] > 0 || rgb[1] > 0 || rgb[2] > 0) {
+                        // Check if this is a light source itself
+                        int nBlockId = world.getBlock(nx, ny, nz);
+                        float[] sourceColor = LightEmitters.getLightColorRGB(nBlockId);
+                        
+                        if (sourceColor != null && !(nx == wx && ny == wy && nz == wz)) {
+                            // This is another light source - add to repro queue
+                            reproQueue.add(new long[]{nx, ny, nz,
+                                Float.floatToIntBits(sourceColor[0]),
+                                Float.floatToIntBits(sourceColor[1]),
+                                Float.floatToIntBits(sourceColor[2])});
+                        }
+                        
+                        // Clear light at this position
+                        world.setBlockLightRGB(nx, ny, nz, 0, 0, 0);
+                        addAffectedChunk(affectedChunks, nx, ny, nz);
+                    }
                 }
             }
         }
 
-        // Re-propagate from other light sources
-        propagateBlockLightBFSTracked(reproQueue, world, affectedChunks);
+        // Re-propagate from remaining light sources
+        propagateBlockLightRGBBFSTracked(reproQueue, world, affectedChunks);
 
         return affectedChunks;
     }
 
     /**
-     * BFS block light propagation that tracks affected chunks.
+     * BFS RGB block light propagation that tracks affected chunks.
      */
-    private static void propagateBlockLightBFSTracked(Queue<long[]> queue, World world, Set<ChunkPos> affected) {
+    private static void propagateBlockLightRGBBFSTracked(Queue<long[]> queue, World world, Set<ChunkPos> affected) {
         while (!queue.isEmpty()) {
             long[] entry = queue.poll();
             int wx = (int) entry[0];
             int wy = (int) entry[1];
             int wz = (int) entry[2];
-            int lightLevel = (int) entry[3];
+            float r = Float.intBitsToFloat((int) entry[3]);
+            float g = Float.intBitsToFloat((int) entry[4]);
+            float b = Float.intBitsToFloat((int) entry[5]);
 
             for (int[] dir : DIRS) {
                 int nx = wx + dir[0];
@@ -337,16 +372,25 @@ public class Lighting {
 
                 if (isOpaque(nBlock)) continue;
 
-                int reduction = getLightReduction(nBlock);
-                int newLight = lightLevel - 1 - reduction;
+                float extraReduction = getLightReductionFactor(nBlock);
+                float falloff = RGB_FALLOFF * extraReduction;
+                float nr = r * falloff;
+                float ng = g * falloff;
+                float nb = b * falloff;
 
-                if (newLight <= 0) continue;
+                if (nr < RGB_MIN_THRESHOLD && ng < RGB_MIN_THRESHOLD && nb < RGB_MIN_THRESHOLD) continue;
 
-                int currentLight = world.getBlockLight(nx, ny, nz);
-                if (newLight > currentLight) {
-                    world.setBlockLight(nx, ny, nz, newLight);
+                float[] current = world.getBlockLightRGB(nx, ny, nz);
+                if (nr > current[0] || ng > current[1] || nb > current[2]) {
+                    float newR = Math.max(nr, current[0]);
+                    float newG = Math.max(ng, current[1]);
+                    float newB = Math.max(nb, current[2]);
+                    world.setBlockLightRGB(nx, ny, nz, newR, newG, newB);
                     addAffectedChunk(affected, nx, ny, nz);
-                    queue.add(new long[]{nx, ny, nz, newLight});
+                    queue.add(new long[]{nx, ny, nz,
+                        Float.floatToIntBits(nr),
+                        Float.floatToIntBits(ng),
+                        Float.floatToIntBits(nb)});
                 }
             }
         }
@@ -379,6 +423,13 @@ public class Lighting {
         if (block.id() == Blocks.WATER.id()) return 2;
         if (block.id() == Blocks.LEAVES.id()) return 1;
         return 0;
+    }
+
+    /** Get light reduction factor (0-1 multiplier) for Phase 4 RGB propagation. */
+    private static float getLightReductionFactor(Block block) {
+        if (Blocks.isWater(block.id())) return 0.7f;  // Water reduces light more
+        if (block.id() == Blocks.LEAVES.id()) return 0.85f;  // Leaves slightly reduce light
+        return 1.0f;  // No extra reduction
     }
 
     private static void addAffectedChunk(Set<ChunkPos> set, int wx, int wy, int wz) {

@@ -9,11 +9,11 @@ import java.util.List;
 
 /**
  * Per-face mesher with ambient occlusion, sky visibility, horizon weight, and indirect lighting.
- * Vertex format: [x, y, z, u, v, skyVisibility, blockLight, horizonWeight, indirectR, indirectG, indirectB] per vertex, 4 vertices per face.
+ * Vertex format: [x, y, z, u, v, skyVisibility, blockLightR, blockLightG, blockLightB, horizonWeight, indirectR, indirectG, indirectB] per vertex, 4 vertices per face.
  *
- * Phase 3 Unified Lighting Model:
+ * Phase 4 Unified Lighting Model:
  * - skyVisibility (0-1): passed to shader for dynamic sky RGB computation
- * - blockLight (0-1): passed to shader for warm torch color
+ * - blockLightR/G/B (0-1): RGB block light from colored light sources (torch=orange, lava=red, etc.)
  * - horizonWeight (0-1): 0 = zenith visible (open sky), 1 = only horizon visible (under overhang)
  * - indirectR/G/B: one-bounce GI from irradiance probes
  * - AO is baked into skyVisibility and blockLight as a multiplier
@@ -22,7 +22,7 @@ import java.util.List;
  *   skyColor = mix(uSkyZenithColor, uSkyHorizonColor, vHorizonWeight)
  *   skyRGB = skyColor * vSkyVisibility * uSkyIntensity
  *   sunRGB = uSunColor * NdotL * uSunIntensity * vSkyVisibility
- *   blockRGB = vec3(1.0, 0.9, 0.7) * vBlockLight
+ *   blockRGB = vBlockLightRGB * flickerAmount  // Phase 4: direct RGB with flicker
  *   indirectRGB = vIndirectRGB * INDIRECT_STRENGTH
  *   totalRGB = skyRGB + sunRGB + blockRGB + indirectRGB
  *
@@ -294,7 +294,7 @@ public class NaiveMesher implements Mesher {
                         // Compute per-vertex AO and separate sky/block light
                         int[][][] aoOffsets = AO_OFFSETS[face];
                         float[] vertSkyLight = new float[4];
-                        float[] vertBlockLight = new float[4];
+                        float[][] vertBlockLightRGB = new float[4][3];  // Phase 4: RGB per vertex
                         int[] aoValues = new int[4];
 
                         // Compute per-vertex visibility using HeightfieldVisibility
@@ -327,13 +327,16 @@ public class NaiveMesher implements Mesher {
                             float skyVis = visResult.visibility;
                             vertHorizonWeight[v] = visResult.horizonWeight;
                             
-                            float blockLight = sampleVertexBlockLight(world, cx + x, y, cz + z,
-                                                                       face, aoOffsets[v]);
+                            // Phase 4: Sample RGB block light
+                            float[] blockLightRGB = sampleVertexBlockLightRGB(world, cx + x, y, cz + z,
+                                                                               face, aoOffsets[v]);
 
                             // Pass visibility and block light with AO and directional factors baked in
                             // Shader computes actual RGB from these + time-of-day uniforms
                             vertSkyLight[v] = dirLight * aoFactor * skyVis;
-                            vertBlockLight[v] = dirLight * aoFactor * (blockLight / 15.0f);
+                            vertBlockLightRGB[v][0] = dirLight * aoFactor * blockLightRGB[0];
+                            vertBlockLightRGB[v][1] = dirLight * aoFactor * blockLightRGB[1];
+                            vertBlockLightRGB[v][2] = dirLight * aoFactor * blockLightRGB[2];
                         }
 
                         float[][] fv = FACE_VERTICES[face];
@@ -350,7 +353,9 @@ public class NaiveMesher implements Mesher {
                             float u = (fuv[v][0] == 0) ? uv[0] : uv[2];
                             float vCoord = (fuv[v][1] == 0) ? uv[1] : uv[3];
                             addVertex(verts, wx + fv[v][0], wy + fv[v][1], wz + fv[v][2],
-                                     u, vCoord, vertSkyLight[v], vertBlockLight[v], vertHorizonWeight[v],
+                                     u, vCoord, vertSkyLight[v], 
+                                     vertBlockLightRGB[v][0], vertBlockLightRGB[v][1], vertBlockLightRGB[v][2],
+                                     vertHorizonWeight[v],
                                      indirect[0], indirect[1], indirect[2]);
                         }
                         if (isTransparent) {
@@ -420,7 +425,9 @@ public class NaiveMesher implements Mesher {
 
     /**
      * Sample block light for a vertex, similar to sky light sampling.
+     * @deprecated Use sampleVertexBlockLightRGB for Phase 4 colored lighting.
      */
+    @Deprecated
     private float sampleVertexBlockLight(WorldAccess world, int bx, int by, int bz,
                                           int face, int[][] aoNeighbors) {
         int[] normal = FACE_NORMALS[face];
@@ -446,10 +453,54 @@ public class NaiveMesher implements Mesher {
         return totalLight / count;
     }
 
+    /**
+     * Phase 4: Sample RGB block light for a vertex.
+     * Averages samples from face-normal position and AO neighbor positions.
+     * @return RGB light values [R, G, B] each 0-1
+     */
+    private float[] sampleVertexBlockLightRGB(WorldAccess world, int bx, int by, int bz,
+                                               int face, int[][] aoNeighbors) {
+        int[] normal = FACE_NORMALS[face];
+        int fnx = bx + normal[0];
+        int fny = by + normal[1];
+        int fnz = bz + normal[2];
+
+        float[] totalLight = getBlockLightRGBSafe(world, fnx, fny, fnz);
+        int count = 1;
+
+        for (int[] ao : aoNeighbors) {
+            int sx = bx + ao[0];
+            int sy = by + ao[1];
+            int sz = bz + ao[2];
+            int blockId = world.getBlock(sx, sy, sz);
+            Block block = Blocks.get(blockId);
+            if (!block.solid() || block.transparent()) {
+                float[] sample = getBlockLightRGBSafe(world, sx, sy, sz);
+                totalLight[0] += sample[0];
+                totalLight[1] += sample[1];
+                totalLight[2] += sample[2];
+                count++;
+            }
+        }
+
+        return new float[] {
+            totalLight[0] / count,
+            totalLight[1] / count,
+            totalLight[2] / count
+        };
+    }
+
     private float getBlockLightSafe(WorldAccess world, int x, int y, int z) {
         if (y >= WorldConstants.WORLD_HEIGHT) return 0.0f;
         if (y < 0) return 0.0f;
         return world.getBlockLight(x, y, z);
+    }
+
+    private float[] getBlockLightRGBSafe(WorldAccess world, int x, int y, int z) {
+        if (y >= WorldConstants.WORLD_HEIGHT || y < 0) {
+            return new float[] {0, 0, 0};
+        }
+        return world.getBlockLightRGB(x, y, z);
     }
 
     private float getSkyVisibilitySafe(WorldAccess world, int x, int y, int z) {
@@ -458,8 +509,14 @@ public class NaiveMesher implements Mesher {
         return world.getSkyVisibility(x, y, z);
     }
 
+    /**
+     * Phase 4: Add vertex with RGB block light (13 floats per vertex).
+     * Format: [x, y, z, u, v, skyVis, blockR, blockG, blockB, horizonWeight, indirectR, indirectG, indirectB]
+     */
     private void addVertex(List<Float> verts, float x, float y, float z,
-                          float u, float v, float skyVisibility, float blockLight, float horizonWeight,
+                          float u, float v, float skyVisibility, 
+                          float blockLightR, float blockLightG, float blockLightB,
+                          float horizonWeight,
                           float indirectR, float indirectG, float indirectB) {
         verts.add(x);
         verts.add(y);
@@ -467,7 +524,9 @@ public class NaiveMesher implements Mesher {
         verts.add(u);
         verts.add(v);
         verts.add(skyVisibility);
-        verts.add(blockLight);
+        verts.add(blockLightR);
+        verts.add(blockLightG);
+        verts.add(blockLightB);
         verts.add(horizonWeight);
         verts.add(indirectR);
         verts.add(indirectG);
@@ -488,13 +547,19 @@ public class NaiveMesher implements Mesher {
     /**
      * Mesh a torch as a small centered cube (4/16 wide, 10/16 tall)
      * with bright light value for the glow effect.
+     * Phase 4: Use RGB block light color for torch self-illumination.
      */
     private int meshTorch(List<Float> verts, List<Integer> indices, int vertexCount,
                            float wx, float wy, float wz, Block block, TextureAtlas atlas) {
         float[] uv = atlas.getUV(block.getTextureIndex(0));
         float skyL = 1.0f;  // fully bright sky component
-        float blkL = 1.0f;  // fully bright block component (torch glow)
         float hrzW = 0.3f;  // balanced horizon weight for torches
+        
+        // Phase 4: Get torch color from LightEmitters (self-illuminated at full intensity)
+        float[] torchColor = LightEmitters.getLightColorRGB(block.id());
+        float blkR = torchColor != null ? torchColor[0] : 1.0f;
+        float blkG = torchColor != null ? torchColor[1] : 0.8f;
+        float blkB = torchColor != null ? torchColor[2] : 0.5f;
         
         // Sample indirect lighting at torch position
         float[] ind = sampleIndirect(wx + 0.5f, wy + 0.5f, wz + 0.5f);
@@ -511,45 +576,45 @@ public class NaiveMesher implements Mesher {
         int base = vertexCount;
 
         // Top (+Y)
-        addVertex(verts, x0, y1, z0, u0, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x0, y1, z1, u0, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x1, y1, z1, u1, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x1, y1, z0, u1, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x0, y1, z0, u0, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x0, y1, z1, u0, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x1, y1, z1, u1, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x1, y1, z0, u1, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         // Bottom (-Y)
-        addVertex(verts, x0, y0, z1, u0, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x0, y0, z0, u0, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x1, y0, z0, u1, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x1, y0, z1, u1, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x0, y0, z1, u0, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x0, y0, z0, u0, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x1, y0, z0, u1, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x1, y0, z1, u1, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         // North (-Z)
-        addVertex(verts, x1, y1, z0, u0, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x1, y0, z0, u0, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x0, y0, z0, u1, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x0, y1, z0, u1, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x1, y1, z0, u0, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x1, y0, z0, u0, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x0, y0, z0, u1, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x0, y1, z0, u1, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         // South (+Z)
-        addVertex(verts, x0, y1, z1, u0, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x0, y0, z1, u0, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x1, y0, z1, u1, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x1, y1, z1, u1, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x0, y1, z1, u0, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x0, y0, z1, u0, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x1, y0, z1, u1, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x1, y1, z1, u1, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         // East (+X)
-        addVertex(verts, x1, y1, z1, u0, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x1, y0, z1, u0, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x1, y0, z0, u1, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x1, y1, z0, u1, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x1, y1, z1, u0, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x1, y0, z1, u0, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x1, y0, z0, u1, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x1, y1, z0, u1, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         // West (-X)
-        addVertex(verts, x0, y1, z0, u0, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x0, y0, z0, u0, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x0, y0, z1, u1, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, x0, y1, z1, u1, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x0, y1, z0, u0, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x0, y0, z0, u0, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x0, y0, z1, u1, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, x0, y1, z1, u1, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         return base;
@@ -558,12 +623,13 @@ public class NaiveMesher implements Mesher {
     /**
      * Mesh a flower/cross-shaped block as two intersecting quads (X-pattern).
      * Classic Minecraft billboard rendering for plants.
+     * Phase 4: No block light emission for flowers (blkR/G/B = 0).
      */
     private int meshCross(List<Float> verts, List<Integer> indices, int vertexCount,
                            float wx, float wy, float wz, Block block, TextureAtlas atlas) {
         float[] uv = atlas.getUV(block.getTextureIndex(0));
         float skyL = 0.85f;  // slightly dimmer sky light
-        float blkL = 0.0f;   // no block light emission
+        float blkR = 0.0f, blkG = 0.0f, blkB = 0.0f;  // no block light emission
         float hrzW = 0.3f;   // balanced horizon weight
         
         // Sample indirect lighting at flower center
@@ -573,31 +639,31 @@ public class NaiveMesher implements Mesher {
         int base = vertexCount;
 
         // Diagonal 1: corner (0,0)→(1,1) — front and back
-        addVertex(verts, wx, wy + 1, wz, u0, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, wy, wz, u0, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, wy, wz + 1, u1, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, wy + 1, wz + 1, u1, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, wy + 1, wz, u0, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, wy, wz, u0, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, wy, wz + 1, u1, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, wy + 1, wz + 1, u1, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         // Back face of diagonal 1
-        addVertex(verts, wx + 1, wy + 1, wz + 1, u0, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, wy, wz + 1, u0, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, wy, wz, u1, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, wy + 1, wz, u1, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, wy + 1, wz + 1, u0, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, wy, wz + 1, u0, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, wy, wz, u1, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, wy + 1, wz, u1, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         // Diagonal 2: corner (1,0)→(0,1) — front and back
-        addVertex(verts, wx + 1, wy + 1, wz, u0, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, wy, wz, u0, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, wy, wz + 1, u1, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, wy + 1, wz + 1, u1, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, wy + 1, wz, u0, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, wy, wz, u0, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, wy, wz + 1, u1, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, wy + 1, wz + 1, u1, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         // Back face of diagonal 2
-        addVertex(verts, wx, wy + 1, wz + 1, u0, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, wy, wz + 1, u0, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, wy, wz, u1, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, wy + 1, wz, u1, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, wy + 1, wz + 1, u0, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, wy, wz + 1, u0, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, wy, wz, u1, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, wy + 1, wz, u1, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         return base;
@@ -606,12 +672,13 @@ public class NaiveMesher implements Mesher {
     /**
      * Mesh a flat quad on the ground surface (for rails, redstone wire).
      * Renders as a single horizontal quad slightly above the block floor.
+     * Phase 4: RGB block light = 0 for non-emissive blocks.
      */
     private int meshFlatQuad(List<Float> verts, List<Integer> indices, int vertexCount,
                               float wx, float wy, float wz, Block block, TextureAtlas atlas) {
         float[] uv = atlas.getUV(block.getTextureIndex(0));
         float skyL = 0.85f;
-        float blkL = 0.0f;
+        float blkR = 0.0f, blkG = 0.0f, blkB = 0.0f;
         float hrzW = 0.3f;
         
         // Sample indirect lighting
@@ -622,17 +689,17 @@ public class NaiveMesher implements Mesher {
         int base = vertexCount;
 
         // Top face
-        addVertex(verts, wx, yOff, wz, u0, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, yOff, wz + 1, u0, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, yOff, wz + 1, u1, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, yOff, wz, u1, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, yOff, wz, u0, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, yOff, wz + 1, u0, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, yOff, wz + 1, u1, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, yOff, wz, u1, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         // Bottom face (visible from below)
-        addVertex(verts, wx + 1, yOff, wz, u0, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, yOff, wz + 1, u0, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, yOff, wz + 1, u1, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, yOff, wz, u1, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, yOff, wz, u0, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, yOff, wz + 1, u0, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, yOff, wz + 1, u1, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, yOff, wz, u1, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         return base;
@@ -641,12 +708,13 @@ public class NaiveMesher implements Mesher {
     /**
      * Mesh a flat slab on the ground surface (for redstone repeater).
      * Renders as a thin box (2/16 tall) on the ground.
+     * Phase 4: RGB block light = 0 for non-emissive blocks.
      */
     private int meshFlatSlab(List<Float> verts, List<Integer> indices, int vertexCount,
                               float wx, float wy, float wz, Block block, TextureAtlas atlas) {
         float[] uv = atlas.getUV(block.getTextureIndex(0));
         float skyL = 0.8f;
-        float blkL = 0.0f;
+        float blkR = 0.0f, blkG = 0.0f, blkB = 0.0f;
         float hrzW = 0.3f;
         
         // Sample indirect lighting
@@ -658,38 +726,38 @@ public class NaiveMesher implements Mesher {
         int base = vertexCount;
 
         // Top (+Y)
-        addVertex(verts, wx, y1, wz, u0, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, y1, wz + 1, u0, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, y1, wz + 1, u1, v1, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, y1, wz, u1, v0, skyL, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, y1, wz, u0, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, y1, wz + 1, u0, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, y1, wz + 1, u1, v1, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, y1, wz, u1, v0, skyL, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         // North (-Z)
-        addVertex(verts, wx + 1, y1, wz, u0, v0, skyL * 0.7f, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, y0, wz, u0, v1, skyL * 0.7f, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, y0, wz, u1, v1, skyL * 0.7f, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, y1, wz, u1, v0, skyL * 0.7f, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, y1, wz, u0, v0, skyL * 0.7f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, y0, wz, u0, v1, skyL * 0.7f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, y0, wz, u1, v1, skyL * 0.7f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, y1, wz, u1, v0, skyL * 0.7f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         // South (+Z)
-        addVertex(verts, wx, y1, wz + 1, u0, v0, skyL * 0.7f, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, y0, wz + 1, u0, v1, skyL * 0.7f, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, y0, wz + 1, u1, v1, skyL * 0.7f, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, y1, wz + 1, u1, v0, skyL * 0.7f, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, y1, wz + 1, u0, v0, skyL * 0.7f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, y0, wz + 1, u0, v1, skyL * 0.7f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, y0, wz + 1, u1, v1, skyL * 0.7f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, y1, wz + 1, u1, v0, skyL * 0.7f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         // East (+X)
-        addVertex(verts, wx + 1, y1, wz + 1, u0, v0, skyL * 0.8f, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, y0, wz + 1, u0, v1, skyL * 0.8f, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, y0, wz, u1, v1, skyL * 0.8f, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx + 1, y1, wz, u1, v0, skyL * 0.8f, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, y1, wz + 1, u0, v0, skyL * 0.8f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, y0, wz + 1, u0, v1, skyL * 0.8f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, y0, wz, u1, v1, skyL * 0.8f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx + 1, y1, wz, u1, v0, skyL * 0.8f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         // West (-X)
-        addVertex(verts, wx, y1, wz, u0, v0, skyL * 0.6f, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, y0, wz, u0, v1, skyL * 0.6f, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, y0, wz + 1, u1, v1, skyL * 0.6f, blkL, hrzW, ind[0], ind[1], ind[2]);
-        addVertex(verts, wx, y1, wz + 1, u1, v0, skyL * 0.6f, blkL, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, y1, wz, u0, v0, skyL * 0.6f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, y0, wz, u0, v1, skyL * 0.6f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, y0, wz + 1, u1, v1, skyL * 0.6f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
+        addVertex(verts, wx, y1, wz + 1, u1, v0, skyL * 0.6f, blkR, blkG, blkB, hrzW, ind[0], ind[1], ind[2]);
         addQuadIndices(indices, base); base += 4;
 
         return base;

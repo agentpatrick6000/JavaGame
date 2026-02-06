@@ -105,6 +105,69 @@ public class World implements WorldAccess {
         chunk.setBlockLight(lx, y, lz, level);
     }
 
+    // ========================================================================
+    // Phase 4: RGB Block Light Methods
+    // ========================================================================
+
+    @Override
+    public float[] getBlockLightRGB(int x, int y, int z) {
+        if (y < 0 || y >= WorldConstants.WORLD_HEIGHT) return new float[] {0, 0, 0};
+        int cx = Math.floorDiv(x, WorldConstants.CHUNK_SIZE);
+        int cz = Math.floorDiv(z, WorldConstants.CHUNK_SIZE);
+        Chunk chunk = chunks.get(new ChunkPos(cx, cz));
+        if (chunk == null) return new float[] {0, 0, 0};
+        int lx = Math.floorMod(x, WorldConstants.CHUNK_SIZE);
+        int lz = Math.floorMod(z, WorldConstants.CHUNK_SIZE);
+        return chunk.getBlockLightRGB(lx, y, lz);
+    }
+
+    @Override
+    public float getBlockLightR(int x, int y, int z) {
+        if (y < 0 || y >= WorldConstants.WORLD_HEIGHT) return 0;
+        int cx = Math.floorDiv(x, WorldConstants.CHUNK_SIZE);
+        int cz = Math.floorDiv(z, WorldConstants.CHUNK_SIZE);
+        Chunk chunk = chunks.get(new ChunkPos(cx, cz));
+        if (chunk == null) return 0;
+        int lx = Math.floorMod(x, WorldConstants.CHUNK_SIZE);
+        int lz = Math.floorMod(z, WorldConstants.CHUNK_SIZE);
+        return chunk.getBlockLightR(lx, y, lz);
+    }
+
+    @Override
+    public float getBlockLightG(int x, int y, int z) {
+        if (y < 0 || y >= WorldConstants.WORLD_HEIGHT) return 0;
+        int cx = Math.floorDiv(x, WorldConstants.CHUNK_SIZE);
+        int cz = Math.floorDiv(z, WorldConstants.CHUNK_SIZE);
+        Chunk chunk = chunks.get(new ChunkPos(cx, cz));
+        if (chunk == null) return 0;
+        int lx = Math.floorMod(x, WorldConstants.CHUNK_SIZE);
+        int lz = Math.floorMod(z, WorldConstants.CHUNK_SIZE);
+        return chunk.getBlockLightG(lx, y, lz);
+    }
+
+    @Override
+    public float getBlockLightB(int x, int y, int z) {
+        if (y < 0 || y >= WorldConstants.WORLD_HEIGHT) return 0;
+        int cx = Math.floorDiv(x, WorldConstants.CHUNK_SIZE);
+        int cz = Math.floorDiv(z, WorldConstants.CHUNK_SIZE);
+        Chunk chunk = chunks.get(new ChunkPos(cx, cz));
+        if (chunk == null) return 0;
+        int lx = Math.floorMod(x, WorldConstants.CHUNK_SIZE);
+        int lz = Math.floorMod(z, WorldConstants.CHUNK_SIZE);
+        return chunk.getBlockLightB(lx, y, lz);
+    }
+
+    public void setBlockLightRGB(int x, int y, int z, float r, float g, float b) {
+        if (y < 0 || y >= WorldConstants.WORLD_HEIGHT) return;
+        int cx = Math.floorDiv(x, WorldConstants.CHUNK_SIZE);
+        int cz = Math.floorDiv(z, WorldConstants.CHUNK_SIZE);
+        Chunk chunk = chunks.get(new ChunkPos(cx, cz));
+        if (chunk == null) return;
+        int lx = Math.floorMod(x, WorldConstants.CHUNK_SIZE);
+        int lz = Math.floorMod(z, WorldConstants.CHUNK_SIZE);
+        chunk.setBlockLightRGB(lx, y, lz, r, g, b);
+    }
+
     @Override
     public Chunk getChunk(int cx, int cz) {
         return chunks.get(new ChunkPos(cx, cz));

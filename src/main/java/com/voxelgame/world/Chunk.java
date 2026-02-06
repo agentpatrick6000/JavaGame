@@ -7,14 +7,20 @@ import com.voxelgame.world.mesh.ChunkMesh;
  * A 16×128×16 column of blocks with light data.
  * Each position stores a block ID and packed light (high nibble = sky, low nibble = block).
  *
+ * Phase 4: RGB block light stored separately for colored light sources.
  * Supports multi-tier LOD meshes: each LOD level can have its own mesh.
  */
 public class Chunk {
 
     private final ChunkPos pos;
     private final byte[] blocks;
-    /** Packed light: high nibble (bits 4-7) = sky light, low nibble (bits 0-3) = block light. */
+    /** Packed light: high nibble (bits 4-7) = sky light, low nibble (bits 0-3) = legacy block light. */
     private final byte[] lightMap;
+    
+    // Phase 4: RGB block light storage (0-255 per channel, normalized to 0-1 in accessors)
+    private final byte[] blockLightR;
+    private final byte[] blockLightG;
+    private final byte[] blockLightB;
     private boolean dirty = true;
     private boolean lightDirty = true;
     private ChunkMesh mesh;
@@ -39,6 +45,10 @@ public class Chunk {
         this.pos = pos;
         this.blocks = new byte[WorldConstants.CHUNK_VOLUME];
         this.lightMap = new byte[WorldConstants.CHUNK_VOLUME];
+        // Phase 4: RGB block light
+        this.blockLightR = new byte[WorldConstants.CHUNK_VOLUME];
+        this.blockLightG = new byte[WorldConstants.CHUNK_VOLUME];
+        this.blockLightB = new byte[WorldConstants.CHUNK_VOLUME];
     }
 
     private int index(int x, int y, int z) {
@@ -145,6 +155,92 @@ public class Chunk {
         }
         int idx = index(x, y, z);
         lightMap[idx] = (byte) ((lightMap[idx] & 0xF0) | (level & 0xF));
+    }
+
+    // ========================================================================
+    // Phase 4: RGB Block Light Methods
+    // ========================================================================
+
+    /**
+     * Get RGB block light at local coordinates.
+     * Returns a 3-element float array [R, G, B] normalized to 0-1.
+     */
+    public float[] getBlockLightRGB(int x, int y, int z) {
+        if (x < 0 || x >= WorldConstants.CHUNK_SIZE ||
+            y < 0 || y >= WorldConstants.WORLD_HEIGHT ||
+            z < 0 || z >= WorldConstants.CHUNK_SIZE) {
+            return new float[] {0, 0, 0};
+        }
+        int idx = index(x, y, z);
+        return new float[] {
+            (blockLightR[idx] & 0xFF) / 255.0f,
+            (blockLightG[idx] & 0xFF) / 255.0f,
+            (blockLightB[idx] & 0xFF) / 255.0f
+        };
+    }
+
+    /**
+     * Get individual RGB block light channels at local coordinates.
+     * @return value 0-1
+     */
+    public float getBlockLightR(int x, int y, int z) {
+        if (x < 0 || x >= WorldConstants.CHUNK_SIZE ||
+            y < 0 || y >= WorldConstants.WORLD_HEIGHT ||
+            z < 0 || z >= WorldConstants.CHUNK_SIZE) {
+            return 0;
+        }
+        return (blockLightR[index(x, y, z)] & 0xFF) / 255.0f;
+    }
+
+    public float getBlockLightG(int x, int y, int z) {
+        if (x < 0 || x >= WorldConstants.CHUNK_SIZE ||
+            y < 0 || y >= WorldConstants.WORLD_HEIGHT ||
+            z < 0 || z >= WorldConstants.CHUNK_SIZE) {
+            return 0;
+        }
+        return (blockLightG[index(x, y, z)] & 0xFF) / 255.0f;
+    }
+
+    public float getBlockLightB(int x, int y, int z) {
+        if (x < 0 || x >= WorldConstants.CHUNK_SIZE ||
+            y < 0 || y >= WorldConstants.WORLD_HEIGHT ||
+            z < 0 || z >= WorldConstants.CHUNK_SIZE) {
+            return 0;
+        }
+        return (blockLightB[index(x, y, z)] & 0xFF) / 255.0f;
+    }
+
+    /**
+     * Set RGB block light at local coordinates.
+     * @param r red 0-1
+     * @param g green 0-1
+     * @param b blue 0-1
+     */
+    public void setBlockLightRGB(int x, int y, int z, float r, float g, float b) {
+        if (x < 0 || x >= WorldConstants.CHUNK_SIZE ||
+            y < 0 || y >= WorldConstants.WORLD_HEIGHT ||
+            z < 0 || z >= WorldConstants.CHUNK_SIZE) {
+            return;
+        }
+        int idx = index(x, y, z);
+        blockLightR[idx] = (byte) Math.clamp(Math.round(r * 255), 0, 255);
+        blockLightG[idx] = (byte) Math.clamp(Math.round(g * 255), 0, 255);
+        blockLightB[idx] = (byte) Math.clamp(Math.round(b * 255), 0, 255);
+        
+        // Also update legacy scalar block light (max channel for compatibility)
+        int maxChannel = Math.max(Math.max(blockLightR[idx] & 0xFF, blockLightG[idx] & 0xFF), 
+                                  blockLightB[idx] & 0xFF);
+        int legacyLevel = maxChannel * 15 / 255;
+        lightMap[idx] = (byte) ((lightMap[idx] & 0xF0) | (legacyLevel & 0xF));
+    }
+
+    /**
+     * Clear all RGB block light in this chunk.
+     */
+    public void clearBlockLightRGB() {
+        java.util.Arrays.fill(blockLightR, (byte) 0);
+        java.util.Arrays.fill(blockLightG, (byte) 0);
+        java.util.Arrays.fill(blockLightB, (byte) 0);
     }
 
     public boolean isDirty() { return dirty; }

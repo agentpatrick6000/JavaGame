@@ -1155,6 +1155,8 @@ public class GameLoop {
         profiler.end("Sky");
 
         profiler.begin("World");
+        // Phase 4: Pass game time for torch flicker animation
+        renderer.setGameTime(time.getTotalTime());
         renderer.render(player.getCamera(), fbW, fbH);
         profiler.end("World");
 
