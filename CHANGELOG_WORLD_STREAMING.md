@@ -57,28 +57,53 @@ Metrics collected:
 
 ---
 
-## [Planned] - Phase C: Fixes
+## [Implemented] - 2025-02-06 - Phase C: Async Fixes
 
-### Priority 1: Async Chunk Loading
-- Move `saveManager.loadChunk()` call to worker thread
-- Add IO worker pool for disk operations
-- Queue loaded chunks for main thread integration
+### ✅ Implemented: Async Chunk Loading
+**Location:** `ChunkManager.requestChunks()` lines 388-400
 
-### Priority 2: Budgeted Mesh Rebuilds
-- Move `buildMesh()` from main thread to mesh pool
-- Add per-frame mesh budget (e.g., 2ms max)
-- Queue dirty chunks instead of immediate rebuild
+```java
+// BEFORE: Blocking disk IO on main thread
+if (saveManager != null) {
+    Chunk loaded = saveManager.loadChunk(cx, cz);  // BLOCKS!
+    ...
+}
 
-### Priority 3: Primitive Key Maps
-- Replace `ConcurrentHashMap<ChunkPos, Chunk>` with long-key primitive map
-- Pack chunk coords: `(long)x << 32 | (z & 0xFFFFFFFFL)`
-- Eliminate ChunkPos allocation on lookups
+// AFTER: Async load in genPool worker
+Future<Chunk> future = genPool.submit(() -> {
+    if (sm != null) {
+        Chunk loaded = sm.loadChunk(cx, cz);  // Non-blocking!
+        if (loaded != null) return loaded;
+    }
+    // Generate if not on disk
+    ...
+});
+```
 
-### Priority 4: Mesh Buffer Reuse
-- Pre-allocate float[] and int[] buffers for meshing
-- Pool and reuse instead of new ArrayList per mesh
-- Estimate: ~80% reduction in mesh build allocations
+### ✅ Implemented: Async Mesh Rebuilds  
+**Location:** `ChunkManager.rebuildMeshAt()` lines 696-720
 
-### Expected Results
-- **Before**: Heap growth, GC spikes, frame stutters on load
-- **After**: Stable heap, smooth loading, no blocking IO
+```java
+// BEFORE: Sync buildMesh() call caused frame spikes
+buildMesh(chunk);
+
+// AFTER: Submit to mesh pool
+submitMeshJob(chunk, pos, false);
+```
+
+Changes:
+- `rebuildMeshAt()` now submits to meshPool instead of blocking
+- `rebuildChunks()` uses async submit
+- New `rebuildChunkAsync()` helper method
+- Dirty chunk processing limited to 4/frame to avoid queue flood
+
+### Deferred: Primitive Key Maps
+Will require more invasive changes to World.java and callers.
+
+### Deferred: Mesh Buffer Reuse
+Requires refactoring NaiveMesher to accept pooled buffers.
+
+### Expected Improvements
+- No frame stutters when loading saved chunks from disk
+- Smooth block place/break without mesh rebuild spikes
+- Reduced main thread blocking during chunk streaming
