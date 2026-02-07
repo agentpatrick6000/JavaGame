@@ -198,6 +198,11 @@ public class Renderer {
     public int getFogMode() {
         return fogMode;
     }
+    
+    /** Set fog mode directly (for profile captures). */
+    public void setFogModeValue(int mode) {
+        this.fogMode = mode % 3;
+    }
 
     /** Set fog mode directly. */
     public void setFogMode(int mode) {

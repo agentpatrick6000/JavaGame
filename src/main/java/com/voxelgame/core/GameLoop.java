@@ -189,6 +189,10 @@ public class GameLoop {
     private float spawnCaptureTimer = 0;
     private int spawnCapturePhase = 0;
     private String spawnCaptureOutputDir = null;
+    
+    // Profile-based capture system (new)
+    private ProfileCapture profileCapture = null;
+    private String captureProfileName = null;  // null = capture all profiles
 
     // Track which world is currently loaded
     private String currentWorldFolder = null;
@@ -215,10 +219,8 @@ public class GameLoop {
     public void setCaptureDebugViews(boolean enabled) { 
         this.captureDebugViews = enabled;
         if (enabled) {
-            // Create timestamped output directory
-            String timestamp = java.time.LocalDateTime.now()
-                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-            this.debugCaptureOutputDir = "artifacts/debug_capture/" + timestamp;
+            // Output directory will be set in initProfileCapture()
+            this.debugCaptureOutputDir = "artifacts/debug_capture";
         }
     }
     
@@ -226,9 +228,8 @@ public class GameLoop {
     public void setCaptureSpawnValidation(boolean enabled) {
         this.captureSpawnValidation = enabled;
         if (enabled) {
-            String timestamp = java.time.LocalDateTime.now()
-                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-            this.spawnCaptureOutputDir = "artifacts/spawn_capture/" + timestamp;
+            // No timestamp - profiles go directly in artifacts/spawn_capture/
+            this.spawnCaptureOutputDir = "artifacts/spawn_capture";
         }
     }
     
@@ -243,6 +244,9 @@ public class GameLoop {
     
     /** Set the capture seed. */
     public void setCaptureSeed(String seed) { this.captureSeed = seed; }
+    
+    /** Set capture profile (BEFORE, AFTER_FOG, AFTER_EXPOSURE). Null = capture all. */
+    public void setCaptureProfile(String profile) { this.captureProfileName = profile; }
 
     // Track create-new-world mode (--create flag)
     private boolean createNewWorldMode = false;
@@ -663,12 +667,53 @@ public class GameLoop {
 
         gameInitialized = true;
         autoSaveTimer = 0;
+        
+        // Initialize profile capture system if debug views enabled
+        if (captureDebugViews) {
+            initProfileCapture(ProfileCapture.CaptureType.DEBUG);
+        } else if (captureSpawnValidation) {
+            initProfileCapture(ProfileCapture.CaptureType.SPAWN);
+        }
 
         // Switch to in-game state
         screenState = ScreenState.IN_GAME;
         Input.lockCursor();
 
         System.out.println("Game started — world: " + folderName);
+    }
+    
+    /**
+     * Initialize the profile-based capture system.
+     */
+    private void initProfileCapture(ProfileCapture.CaptureType type) {
+        java.util.List<CaptureProfile> profiles = new java.util.ArrayList<>();
+        
+        if (type == ProfileCapture.CaptureType.DEBUG) {
+            if (captureProfileName != null) {
+                // Single profile specified
+                profiles.add(CaptureProfile.fromString(captureProfileName));
+            } else {
+                // Capture all debug profiles
+                profiles.add(CaptureProfile.create(CaptureProfile.ProfileType.BEFORE));
+                profiles.add(CaptureProfile.create(CaptureProfile.ProfileType.AFTER_FOG));
+                profiles.add(CaptureProfile.create(CaptureProfile.ProfileType.AFTER_EXPOSURE));
+            }
+        } else {
+            // Spawn validation profiles
+            profiles.add(CaptureProfile.create(CaptureProfile.ProfileType.SPAWN_BEFORE));
+            profiles.add(CaptureProfile.create(CaptureProfile.ProfileType.SPAWN_AFTER));
+        }
+        
+        String baseDir = (type == ProfileCapture.CaptureType.DEBUG) 
+            ? debugCaptureOutputDir 
+            : spawnCaptureOutputDir;
+        
+        profileCapture = new ProfileCapture(type, profiles, baseDir, captureSeed);
+        profileCapture.setReferences(player, worldTime, renderer, postFX, chunkManager,
+            window.getFramebufferWidth(), window.getFramebufferHeight());
+        
+        System.out.println("[GameLoop] Profile capture initialized: " + type + 
+            " with " + profiles.size() + " profile(s)");
     }
 
     /**
@@ -1896,309 +1941,73 @@ public class GameLoop {
         };
     }
 
-    // ---- Debug View Capture ----
+    // ---- Profile-Based Capture System ----
     
     private void updateDebugCapture(int w, int h, float dt) {
-        int fbW = window.getFramebufferWidth();
-        int fbH = window.getFramebufferHeight();
-        debugCaptureTimer += dt;
+        if (profileCapture == null) return;
         
-        // Phases:
-        // 0: Setup (teleport, set time, count warmup frames)
-        // 1-5: Capture debug views (final, depth, fog_dist, fog_height, fog_combined)
-        // 6-7: Capture composite debug views (hdr_pre_tonemap, ldr_post_tonemap)
-        // 8: Save render_state.json
-        // 9: Exit
+        profileCapture.update(dt);
         
-        switch (debugCapturePhase) {
-            case 0:
-                // Setup: ensure creative mode and flight immediately
-                if (debugCaptureTimer < 0.1f) {
-                    // Ensure creative mode and flight for stability
-                    player.setGameMode(GameMode.CREATIVE);
-                    if (!player.isFlyMode()) {
-                        player.toggleFlyMode();
-                    }
-                    return;
-                }
-                
-                // Count warmup frames
-                debugWarmupFrames++;
-                
-                // Keep teleporting every frame during warmup to prevent drift
-                player.getCamera().getPosition().set(DEBUG_CAPTURE_X, DEBUG_CAPTURE_Y, DEBUG_CAPTURE_Z);
-                player.getCamera().setYaw(DEBUG_CAPTURE_YAW);
-                player.getCamera().setPitch(DEBUG_CAPTURE_PITCH);
-                
-                // Keep time fixed
-                if (worldTime != null) {
-                    worldTime.setWorldTick(DEBUG_CAPTURE_TIME_OF_DAY);
-                }
-                
-                if (debugWarmupFrames >= DEBUG_WARMUP_FRAME_COUNT) {
-                    System.out.println("[DebugCapture] Warmup complete (" + debugWarmupFrames + " frames), starting captures...");
-                    System.out.println("[DebugCapture] Setup: pos=(" + DEBUG_CAPTURE_X + ", " + DEBUG_CAPTURE_Y + 
-                        ", " + DEBUG_CAPTURE_Z + ") yaw=" + DEBUG_CAPTURE_YAW + " pitch=" + DEBUG_CAPTURE_PITCH +
-                        " time=" + DEBUG_CAPTURE_TIME_OF_DAY);
-                    debugCapturePhase = 1;
-                    debugCaptureTimer = 0;
-                    
-                    // Create output directory
-                    java.io.File dir = new java.io.File(debugCaptureOutputDir);
-                    dir.mkdirs();
-                    System.out.println("[DebugCapture] Output directory: " + dir.getAbsolutePath());
-                }
-                break;
-                
-            case 1, 2, 3, 4, 5:
-                // Keep position and time fixed during captures
-                player.getCamera().getPosition().set(DEBUG_CAPTURE_X, DEBUG_CAPTURE_Y, DEBUG_CAPTURE_Z);
-                player.getCamera().setYaw(DEBUG_CAPTURE_YAW);
-                player.getCamera().setPitch(DEBUG_CAPTURE_PITCH);
-                if (worldTime != null) worldTime.setWorldTick(DEBUG_CAPTURE_TIME_OF_DAY);
-                
-                // Capture debug views
-                int captureIndex = debugCapturePhase - 1;
-                int viewIndex = DEBUG_VIEW_INDICES[captureIndex];
-                renderer.setDebugView(viewIndex);
-                postFX.setCompositeDebugMode(PostFX.COMPOSITE_NORMAL);
-                
-                if (debugCaptureTimer > 0.2f) {
-                    String filename = DEBUG_VIEW_FILENAMES[captureIndex] + ".png";
-                    String path = Screenshot.captureToFile(fbW, fbH, debugCaptureOutputDir + "/" + filename);
-                    System.out.println("[DebugCapture] Saved: " + path);
-                    debugCapturePhase++;
-                    debugCaptureTimer = 0;
-                }
-                break;
-                
-            case 6:
-                // Keep position and time fixed
-                player.getCamera().getPosition().set(DEBUG_CAPTURE_X, DEBUG_CAPTURE_Y, DEBUG_CAPTURE_Z);
-                player.getCamera().setYaw(DEBUG_CAPTURE_YAW);
-                player.getCamera().setPitch(DEBUG_CAPTURE_PITCH);
-                if (worldTime != null) worldTime.setWorldTick(DEBUG_CAPTURE_TIME_OF_DAY);
-                
-                // Capture HDR pre-tonemap
-                renderer.setDebugView(0);
-                postFX.setCompositeDebugMode(PostFX.COMPOSITE_HDR_PRE_TONEMAP);
-                
-                if (debugCaptureTimer > 0.2f) {
-                    String path = Screenshot.captureToFile(fbW, fbH, debugCaptureOutputDir + "/hdr_pre_tonemap.png");
-                    System.out.println("[DebugCapture] Saved: " + path);
-                    debugCapturePhase = 7;
-                    debugCaptureTimer = 0;
-                }
-                break;
-                
-            case 7:
-                // Keep position and time fixed
-                player.getCamera().getPosition().set(DEBUG_CAPTURE_X, DEBUG_CAPTURE_Y, DEBUG_CAPTURE_Z);
-                player.getCamera().setYaw(DEBUG_CAPTURE_YAW);
-                player.getCamera().setPitch(DEBUG_CAPTURE_PITCH);
-                if (worldTime != null) worldTime.setWorldTick(DEBUG_CAPTURE_TIME_OF_DAY);
-                
-                // Capture LDR post-tonemap
-                renderer.setDebugView(0);
-                postFX.setCompositeDebugMode(PostFX.COMPOSITE_LDR_POST_TONEMAP);
-                
-                if (debugCaptureTimer > 0.2f) {
-                    String path = Screenshot.captureToFile(fbW, fbH, debugCaptureOutputDir + "/ldr_post_tonemap.png");
-                    System.out.println("[DebugCapture] Saved: " + path);
-                    debugCapturePhase = 8;
-                    debugCaptureTimer = 0;
-                }
-                break;
-                
-            case 8:
-                // Keep position and time fixed for accurate state capture
-                player.getCamera().getPosition().set(DEBUG_CAPTURE_X, DEBUG_CAPTURE_Y, DEBUG_CAPTURE_Z);
-                player.getCamera().setYaw(DEBUG_CAPTURE_YAW);
-                player.getCamera().setPitch(DEBUG_CAPTURE_PITCH);
-                if (worldTime != null) worldTime.setWorldTick(DEBUG_CAPTURE_TIME_OF_DAY);
-                
-                // Reset to normal and save render state JSON
-                renderer.setDebugView(0);
-                postFX.setCompositeDebugMode(PostFX.COMPOSITE_NORMAL);
-                saveRenderStateJson();
-                debugCapturePhase = 9;
-                debugCaptureTimer = 0;
-                break;
-                
-            case 9:
-                if (debugCaptureTimer > 0.5f) {
-                    System.out.println("[DebugCapture] Complete. Exiting.");
-                    window.requestClose();
-                }
-                break;
-        }
-    }
-    
-    private void saveRenderStateJson() {
-        try {
-            java.io.File dir = new java.io.File(debugCaptureOutputDir);
-            dir.mkdirs();
-            java.io.File file = new java.io.File(dir, "render_state.json");
-            
-            // Get world seed
-            long worldSeed = 0;
-            if (chunkManager != null) {
-                worldSeed = chunkManager.getSeed();
-            }
-            
-            // Check sRGB framebuffer state
-            boolean srgbEnabled = org.lwjgl.opengl.GL33.glIsEnabled(org.lwjgl.opengl.GL33.GL_FRAMEBUFFER_SRGB);
-            
-            StringBuilder json = new StringBuilder();
-            json.append("{\n");
-            
-            // Timestamp
-            json.append("  \"capture_timestamp\": \"")
-                .append(java.time.Instant.now().toString())
-                .append("\",\n");
-            
-            // World seed
-            json.append("  \"world_seed\": ").append(worldSeed).append(",\n");
-            
-            // Camera position and orientation
-            json.append("  \"camera_pos\": [")
-                .append(player.getCamera().getPosition().x).append(", ")
-                .append(player.getCamera().getPosition().y).append(", ")
-                .append(player.getCamera().getPosition().z).append("],\n");
-            json.append("  \"camera_yaw\": ").append(player.getCamera().getYaw()).append(",\n");
-            json.append("  \"camera_pitch\": ").append(player.getCamera().getPitch()).append(",\n");
-            
-            // Warmup frames
-            json.append("  \"warmup_frames\": ").append(debugWarmupFrames).append(",\n");
-            
-            // Camera planes and FOV
-            json.append("  \"near_plane\": ").append(player.getCamera().getNearPlane()).append(",\n");
-            json.append("  \"far_plane\": ").append(player.getCamera().getFarPlane()).append(",\n");
-            json.append("  \"fov\": ").append(player.getCamera().getFov()).append(",\n");
-            
-            // Time of day
-            json.append("  \"time_of_day_ticks\": ").append(worldTime != null ? worldTime.getWorldTick() : 0).append(",\n");
-            
-            // Exposure and color grading (from PostFX)
-            json.append("  \"exposure_source\": \"shader_constant\",\n");
-            json.append("  \"exposure_multiplier_runtime\": ").append(postFX != null ? postFX.getExposureMultiplier() : 1.0f).append(",\n");
-            json.append("  \"saturation_multiplier_runtime\": ").append(postFX != null ? postFX.getSaturationMultiplier() : 1.0f).append(",\n");
-            json.append("  \"tonemap_operator\": \"ACES\",\n");
-            
-            // Gamma mode
-            json.append("  \"manual_gamma_enabled_runtime\": ").append(postFX != null && postFX.getGammaMode() == PostFX.GAMMA_MANUAL).append(",\n");
-            json.append("  \"srgb_framebuffer_enabled_runtime\": ").append(srgbEnabled).append(",\n");
-            
-            // Fog locations
-            int fogMode = renderer.getFogMode();
-            json.append("  \"fog_locations\": {\n");
-            json.append("    \"terrain\": ").append(fogMode == Renderer.FOG_WORLD_ONLY).append(",\n");
-            json.append("    \"post\": false,\n");  // No post-process fog currently
-            json.append("    \"sky\": false,\n");   // Sky doesn't have fog
-            json.append("    \"water\": ").append(fogMode == Renderer.FOG_WORLD_ONLY).append("\n");
-            json.append("  },\n");
-            
-            // Fog parameters
-            json.append("  \"fog_params_runtime\": {\n");
-            json.append("    \"start\": ").append(renderer.getFogStart()).append(",\n");
-            json.append("    \"end\": ").append(renderer.getFogEnd()).append(",\n");
-            json.append("    \"height_fog_enabled\": false,\n");  // Height fog was removed
-            json.append("    \"height_fog_coeff\": 0,\n");
-            json.append("    \"height_fog_scale\": 0\n");
-            json.append("  },\n");
-            
-            // Additional runtime info
-            json.append("  \"rendered_chunks\": ").append(renderer.getRenderedChunks()).append(",\n");
-            json.append("  \"smooth_lighting\": ").append(renderer.isSmoothLighting()).append(",\n");
-            json.append("  \"postfx_enabled\": ").append(postFX != null && postFX.isInitialized()).append(",\n");
-            json.append("  \"ssao_enabled\": ").append(postFX != null && postFX.isSSAOEnabled()).append(",\n");
-            json.append("  \"debug_view_mode\": ").append(renderer.getDebugView()).append(",\n");
-            json.append("  \"fog_mode\": ").append(fogMode).append("\n");
-            
-            json.append("}\n");
-            
-            java.io.FileWriter writer = new java.io.FileWriter(file);
-            writer.write(json.toString());
-            writer.close();
-            System.out.println("[DebugCapture] Saved: " + file.getAbsolutePath());
-        } catch (Exception e) {
-            System.err.println("[DebugCapture] Failed to save render_state.json: " + e.getMessage());
+        if (profileCapture.isComplete()) {
+            System.out.println("[DebugCapture] All profiles complete. Exiting.");
+            window.requestClose();
         }
     }
 
     // ---- Spawn Validation Capture ----
     
     private void updateSpawnCapture(int w, int h, float dt) {
+        if (profileCapture == null) return;
+        
+        profileCapture.update(dt);
+        
+        if (profileCapture.isComplete()) {
+            System.out.println("[SpawnCapture] All profiles complete. Exiting.");
+            window.requestClose();
+        }
+    }
+    
+    // Legacy spawn capture methods (kept for backwards compatibility)
+    private void updateSpawnCaptureLegacy(int w, int h, float dt) {
         int fbW = window.getFramebufferWidth();
         int fbH = window.getFramebufferHeight();
         spawnCaptureTimer += dt;
         
-        // Phases:
-        // 0: Find spawn point and teleport there
-        // 1: Warmup
-        // 2: Capture screenshot
-        // 3: Save spawn_report.json
-        // 4: Exit
-        
         switch (spawnCapturePhase) {
             case 0:
                 if (spawnCaptureTimer < 0.1f) {
-                    // Find spawn point using SpawnPointFinder
                     GenPipeline pipeline = chunkManager.getPipeline();
                     if (pipeline != null) {
                         SpawnPointFinder.SpawnPoint spawn = SpawnPointFinder.find(pipeline.getContext());
-                        
-                        // Teleport to spawn
                         player.getCamera().getPosition().set(
                             (float) spawn.x(), (float) spawn.y(), (float) spawn.z()
                         );
                         player.getCamera().setYaw(0);
-                        player.getCamera().setPitch(10); // Slight downward look
-                        
-                        // Set noon time
-                        if (worldTime != null) {
-                            worldTime.setWorldTick(6000);
-                        }
-                        
-                        // Enable creative + flight
+                        player.getCamera().setPitch(10);
+                        if (worldTime != null) worldTime.setWorldTick(6000);
                         player.setGameMode(GameMode.CREATIVE);
-                        if (!player.isFlyMode()) {
-                            player.toggleFlyMode();
-                        }
-                        
-                        System.out.println("[SpawnCapture] Teleported to spawn: (" + 
-                            spawn.x() + ", " + spawn.y() + ", " + spawn.z() + ")");
+                        if (!player.isFlyMode()) player.toggleFlyMode();
                     }
                     return;
                 }
                 spawnCapturePhase = 1;
                 spawnCaptureTimer = 0;
                 break;
-                
             case 1:
-                // Warmup for 3 seconds
                 if (spawnCaptureTimer > 3.0f) {
-                    // Create output directory
-                    java.io.File dir = new java.io.File(spawnCaptureOutputDir);
-                    dir.mkdirs();
-                    System.out.println("[SpawnCapture] Output directory: " + dir.getAbsolutePath());
+                    new java.io.File(spawnCaptureOutputDir).mkdirs();
                     spawnCapturePhase = 2;
                     spawnCaptureTimer = 0;
                 }
                 break;
-                
             case 2:
-                // Capture screenshot
                 if (spawnCaptureTimer > 0.2f) {
-                    String path = Screenshot.captureToFile(fbW, fbH, spawnCaptureOutputDir + "/spawn.png");
-                    System.out.println("[SpawnCapture] Saved: " + path);
+                    Screenshot.captureToFile(fbW, fbH, spawnCaptureOutputDir + "/spawn.png");
                     spawnCapturePhase = 3;
                     spawnCaptureTimer = 0;
                 }
                 break;
-                
             case 3:
-                // Save spawn_report.json
                 saveSpawnReportJson();
                 spawnCapturePhase = 4;
                 spawnCaptureTimer = 0;

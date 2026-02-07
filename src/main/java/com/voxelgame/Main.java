@@ -27,6 +27,7 @@ public class Main {
         String scriptPath = null;
         String captureOutputDir = null;
         String captureSeed = null;
+        String captureProfile = null;  // New: --profile BEFORE/AFTER_FOG/AFTER_EXPOSURE
 
         // Parse command-line arguments
         for (int i = 0; i < args.length; i++) {
@@ -44,6 +45,11 @@ public class Main {
                 case "--capture-seed" -> {
                     if (i + 1 < args.length) {
                         captureSeed = args[++i];
+                    }
+                }
+                case "--profile" -> {
+                    if (i + 1 < args.length) {
+                        captureProfile = args[++i];
                     }
                 }
                 case "--create" -> {
@@ -84,6 +90,8 @@ public class Main {
                     System.out.println("  --capture-spawn-validation  Capture spawn point validation report");
                     System.out.println("  --capture-output <dir> Output directory for captures");
                     System.out.println("  --capture-seed <seed>  Fixed seed for captures (default: 42)");
+                    System.out.println("  --profile <name>       Capture profile: BEFORE, AFTER_FOG, AFTER_EXPOSURE");
+                    System.out.println("                         (captures all profiles if not specified)");
                     System.out.println("  --help, -h             Show this help message");
                     System.exit(0);
                 }
@@ -122,6 +130,11 @@ public class Main {
         if (captureOutputDir != null) {
             loop.setDebugCaptureOutputDir(captureOutputDir);
             loop.setSpawnCaptureOutputDir(captureOutputDir);
+        }
+        
+        // Set capture profile if specified
+        if (captureProfile != null) {
+            loop.setCaptureProfile(captureProfile);
         }
 
         // Direct/create mode skips the menu

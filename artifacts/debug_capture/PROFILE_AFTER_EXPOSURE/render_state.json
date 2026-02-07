@@ -1,0 +1,41 @@
+{
+  "git_head_hash": "eb920eeb723fdf7c521edde629eb2f690be337a7",
+  "profile_name": "AFTER_EXPOSURE",
+  "profile_overrides": {
+    "fog_enabled": true,
+    "fog_start": 80.0,
+    "fog_end": 192.0,
+    "height_fog_enabled": false,
+    "height_fog_coeff": 0.0,
+    "exposure_multiplier": 1.4,
+    "saturation_multiplier": 1.35,
+    "tonemap_enabled": true,
+    "gamma": 2.2,
+    "srgb_enabled": false,
+    "ssao_enabled": true
+  },
+  "seed": 42,
+  "camera": [0.5, 100.0, 0.5],
+  "warmup": 120,
+  "near": 0.1,
+  "far": 384.0,
+  "fov": 70.0,
+  "timeOfDay": 6000,
+  "exposure_runtime": 1.4,
+  "saturation_runtime": 1.35,
+  "tonemap": "ACES",
+  "gamma_runtime": 2.2,
+  "srgb_runtime": false,
+  "fog_params_runtime": {
+    "start": 192.0,
+    "end": 320.0,
+    "mode": "WORLD_ONLY"
+  },
+  "fog_locations_runtime": {
+    "terrain": true,
+    "post": false,
+    "sky": false,
+    "water": true
+  },
+  "capture_timestamp": "2026-02-07T02:38:25.081131Z"
+}
