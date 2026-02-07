@@ -1,5 +1,6 @@
 package com.voxelgame.save;
 
+import com.voxelgame.bench.BenchFixes;
 import com.voxelgame.world.Chunk;
 import com.voxelgame.world.ChunkPos;
 import com.voxelgame.world.World;
@@ -9,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.List;
@@ -23,6 +25,9 @@ import java.util.ArrayList;
  *     world.dat          — metadata (seed, player pos, etc.)
  *     region/
  *       r.{rx}.{rz}.dat  — region files containing chunk data
+ *
+ * When FIX_ASYNC_REGION_IO is enabled, saves are queued to a background
+ * thread and the main thread never blocks on disk writes.
  */
 public class SaveManager {
 
@@ -32,14 +37,27 @@ public class SaveManager {
     private final Path regionDir;
     private final String worldName;
 
-    /** Cached open region files. */
+    /** Cached open region files (used for sync mode). */
     private final Map<Long, RegionFile> regionCache = new ConcurrentHashMap<>();
+
+    /** Async region writer (used when FIX_ASYNC_REGION_IO is enabled). */
+    private AsyncRegionWriter asyncWriter;
+
+    // ---- Sync mode stats ----
+    private final AtomicLong syncBytesWritten = new AtomicLong(0);
+    private final AtomicLong syncChunksSaved = new AtomicLong(0);
+    private final AtomicLong syncIoTimeNs = new AtomicLong(0);
 
     public SaveManager(String worldName) {
         this.worldName = worldName;
         String home = System.getProperty("user.home");
         this.saveDir = Paths.get(home, ".voxelgame", "saves", worldName);
         this.regionDir = saveDir.resolve("region");
+        
+        // Initialize async writer if enabled
+        if (BenchFixes.FIX_ASYNC_REGION_IO) {
+            this.asyncWriter = new AsyncRegionWriter(regionDir);
+        }
     }
 
     /** Get the save directory path. */
@@ -64,13 +82,27 @@ public class SaveManager {
 
     /**
      * Save a single chunk to its region file.
+     * When FIX_ASYNC_REGION_IO is enabled, this enqueues to background thread
+     * and returns immediately (never blocks main thread).
      */
     public void saveChunk(Chunk chunk) throws IOException {
         ChunkPos pos = chunk.getPos();
         byte[] data = ChunkCodec.encode(chunk);
 
-        RegionFile region = getOrCreateRegion(pos.x(), pos.z());
-        region.writeChunkData(pos.x(), pos.z(), data);
+        if (BenchFixes.FIX_ASYNC_REGION_IO && asyncWriter != null) {
+            // Async mode: enqueue and return immediately
+            asyncWriter.enqueue(pos.x(), pos.z(), data);
+        } else {
+            // Sync mode: write directly (blocks main thread)
+            long startNs = System.nanoTime();
+            RegionFile region = getOrCreateRegion(pos.x(), pos.z());
+            region.writeChunkData(pos.x(), pos.z(), data);
+            long elapsedNs = System.nanoTime() - startNs;
+            
+            syncBytesWritten.addAndGet(data.length);
+            syncChunksSaved.incrementAndGet();
+            syncIoTimeNs.addAndGet(elapsedNs);
+        }
 
         chunk.setModified(false);
     }
@@ -180,9 +212,63 @@ public class SaveManager {
 
     /**
      * Close all cached region files and clear the cache.
+     * Flushes and shuts down async writer if enabled.
      */
     public void close() {
+        if (asyncWriter != null) {
+            asyncWriter.flushSync(); // Ensure all pending writes complete
+            asyncWriter.shutdown();
+            asyncWriter = null;
+        }
         regionCache.clear();
+    }
+
+    // ---- IO Stats for benchmarking ----
+
+    /** Number of pending async IO jobs. */
+    public int getPendingIoJobs() {
+        if (asyncWriter != null) {
+            return asyncWriter.getPendingJobCount();
+        }
+        return 0;
+    }
+
+    /** Total bytes written to disk. */
+    public long getBytesWrittenTotal() {
+        if (asyncWriter != null) {
+            return asyncWriter.getBytesWrittenTotal();
+        }
+        return syncBytesWritten.get();
+    }
+
+    /** Total chunks saved to disk. */
+    public long getChunksSavedTotal() {
+        if (asyncWriter != null) {
+            return asyncWriter.getChunksWrittenTotal();
+        }
+        return syncChunksSaved.get();
+    }
+
+    /** Time spent in IO flush (ms). For async, this is on IO thread. */
+    public long getIoFlushMs() {
+        if (asyncWriter != null) {
+            return asyncWriter.getIoFlushMs();
+        }
+        return syncIoTimeNs.get() / 1_000_000;
+    }
+
+    /** Time main thread was blocked on IO (ms). Should be ~0 with async. */
+    public long getMainThreadBlockedMs() {
+        if (asyncWriter != null) {
+            return asyncWriter.getMainThreadBlockedMs();
+        }
+        // In sync mode, all IO time is main thread blocked time
+        return syncIoTimeNs.get() / 1_000_000;
+    }
+
+    /** Check if async IO is currently enabled. */
+    public boolean isAsyncIoEnabled() {
+        return asyncWriter != null;
     }
 
     // ---- Static utilities for world management ----

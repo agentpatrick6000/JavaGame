@@ -410,6 +410,8 @@ public class ChunkManager {
                             pipeline.generate(chunk);
                         }
                         chunk.setCurrentLOD(genLevel);
+                        // Mark newly generated chunks as modified so they get saved on unload
+                        chunk.setModified(true);
                         return chunk;
                     });
                     pendingGen.put(pos, future);
@@ -860,7 +862,18 @@ public class ChunkManager {
         return count;
     }
     public int getPendingMeshJobs() { return meshingInProgress.size(); }
-    public int getPendingIoJobs() { return pendingGen.size(); }
+    
+    /** Get pending IO jobs (save queue size). */
+    public int getPendingIoJobs() { 
+        if (saveManager != null) {
+            return saveManager.getPendingIoJobs();
+        }
+        return 0; 
+    }
+    
+    /** Get pending generation jobs (load/gen queue size). */
+    public int getPendingGenJobs() { return pendingGen.size(); }
+    
     public int getTotalMeshQuads() {
         int total = 0;
         for (var chunk : world.getChunkMap().values()) {
@@ -869,7 +882,30 @@ public class ChunkManager {
         }
         return total;
     }
-    public boolean isAsyncIoEnabled() { return true; } // Currently all IO is sync, but claiming async for future
+    
+    public boolean isAsyncIoEnabled() { 
+        return saveManager != null && saveManager.isAsyncIoEnabled(); 
+    }
+    
+    /** Total bytes written to disk by SaveManager. */
+    public long getBytesWrittenTotal() {
+        return saveManager != null ? saveManager.getBytesWrittenTotal() : 0;
+    }
+    
+    /** Total chunks saved to disk by SaveManager. */
+    public long getChunksSavedTotal() {
+        return saveManager != null ? saveManager.getChunksSavedTotal() : 0;
+    }
+    
+    /** Time spent in IO flush (ms). */
+    public long getIoFlushMs() {
+        return saveManager != null ? saveManager.getIoFlushMs() : 0;
+    }
+    
+    /** Time main thread was blocked on IO (ms). */
+    public long getMainThreadBlockedMs() {
+        return saveManager != null ? saveManager.getMainThreadBlockedMs() : 0;
+    }
 
     public void shutdown() {
         if (genPool != null) {

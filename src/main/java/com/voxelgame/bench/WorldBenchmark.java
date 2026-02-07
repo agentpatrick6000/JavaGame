@@ -77,6 +77,9 @@ public class WorldBenchmark {
         int pendingIoJobs;
         int meshQuads;
         long mainThreadBlockedMs;
+        long bytesWrittenTotal;
+        long chunksWrittenTotal;
+        long ioFlushMs;
     }
     
     public WorldBenchmark(ChunkManager chunkManager, World world, Player player, 
@@ -180,7 +183,12 @@ public class WorldBenchmark {
         s.pendingMeshJobs = chunkManager.getPendingMeshJobs();
         s.pendingIoJobs = chunkManager.getPendingIoJobs();
         s.meshQuads = chunkManager.getTotalMeshQuads();
-        s.mainThreadBlockedMs = 0; // Not easily measurable without instrumentation
+        
+        // IO stats
+        s.mainThreadBlockedMs = chunkManager.getMainThreadBlockedMs();
+        s.bytesWrittenTotal = chunkManager.getBytesWrittenTotal();
+        s.chunksWrittenTotal = chunkManager.getChunksSavedTotal();
+        s.ioFlushMs = chunkManager.getIoFlushMs();
         
         samples.add(s);
     }
@@ -225,12 +233,12 @@ public class WorldBenchmark {
     
     private void writeSamples() throws IOException {
         try (PrintWriter pw = new PrintWriter(new FileWriter(new File(outputDir, "bench_samples.csv")))) {
-            pw.println("timestamp_ms,fps,frame_ms,gc_pause_ms,heap_used_mb,loaded_chunks,meshed_chunks,pending_mesh_jobs,pending_io_jobs,mesh_quads,main_thread_blocked_ms");
+            pw.println("timestamp_ms,fps,frame_ms,gc_pause_ms,heap_used_mb,loaded_chunks,meshed_chunks,pending_mesh_jobs,pending_io_jobs,mesh_quads,main_thread_blocked_ms,bytes_written_total,chunks_saved_total,io_flush_ms");
             for (Sample s : samples) {
-                pw.printf("%d,%.2f,%.3f,%d,%d,%d,%d,%d,%d,%d,%d%n",
+                pw.printf("%d,%.2f,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d%n",
                     s.timestampMs, s.fps, s.frameMs, s.gcPauseMs, s.heapUsedMb,
                     s.loadedChunks, s.meshedChunks, s.pendingMeshJobs, s.pendingIoJobs,
-                    s.meshQuads, s.mainThreadBlockedMs);
+                    s.meshQuads, s.mainThreadBlockedMs, s.bytesWrittenTotal, s.chunksWrittenTotal, s.ioFlushMs);
             }
         }
     }
@@ -262,10 +270,16 @@ public class WorldBenchmark {
         
         // Max chunks and queues
         int maxLoadedChunks = 0, maxPendingMesh = 0, maxPendingIo = 0;
+        long totalMainThreadBlocked = 0;
+        long finalBytesWritten = 0, finalChunksSaved = 0, finalIoFlushMs = 0;
         for (Sample s : samples) {
             if (s.loadedChunks > maxLoadedChunks) maxLoadedChunks = s.loadedChunks;
             if (s.pendingMeshJobs > maxPendingMesh) maxPendingMesh = s.pendingMeshJobs;
             if (s.pendingIoJobs > maxPendingIo) maxPendingIo = s.pendingIoJobs;
+            totalMainThreadBlocked = s.mainThreadBlockedMs; // Use latest (cumulative)
+            finalBytesWritten = s.bytesWrittenTotal;
+            finalChunksSaved = s.chunksWrittenTotal;
+            finalIoFlushMs = s.ioFlushMs;
         }
         
         try (PrintWriter pw = new PrintWriter(new FileWriter(new File(outputDir, "bench_summary.json")))) {
@@ -280,8 +294,11 @@ public class WorldBenchmark {
             pw.printf("  \"max_loaded_chunks\": %d,%n", maxLoadedChunks);
             pw.printf("  \"max_pending_mesh_jobs\": %d,%n", maxPendingMesh);
             pw.printf("  \"max_pending_io_jobs\": %d,%n", maxPendingIo);
-            pw.println("  \"total_bytes_written\": 0,");
-            pw.println("  \"total_chunks_saved\": 0");
+            pw.printf("  \"pending_io_jobs\": %d,%n", maxPendingIo);
+            pw.printf("  \"bytes_written_total\": %d,%n", finalBytesWritten);
+            pw.printf("  \"chunks_saved_total\": %d,%n", finalChunksSaved);
+            pw.printf("  \"io_flush_ms\": %d,%n", finalIoFlushMs);
+            pw.printf("  \"main_thread_blocked_ms\": %d%n", totalMainThreadBlocked);
             pw.println("}");
         }
     }
