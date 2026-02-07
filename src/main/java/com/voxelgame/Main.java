@@ -26,6 +26,8 @@ public class Main {
         boolean createMode = false;
         boolean benchWorldMode = false;
         String benchWorldPhase = "BEFORE";
+        String benchSeed = null;
+        String benchOutDir = null;
         String directWorldName = null;
         String scriptPath = null;
         String captureOutputDir = null;
@@ -61,6 +63,16 @@ public class Main {
                     // Optional phase name: BEFORE or AFTER
                     if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
                         benchWorldPhase = args[++i].toUpperCase();
+                    }
+                }
+                case "--seed" -> {
+                    if (i + 1 < args.length) {
+                        benchSeed = args[++i];
+                    }
+                }
+                case "--bench-out" -> {
+                    if (i + 1 < args.length) {
+                        benchOutDir = args[++i];
                     }
                 }
                 case "--create" -> {
@@ -151,7 +163,7 @@ public class Main {
         
         // Set benchmark mode if requested
         if (benchWorldMode) {
-            loop.setBenchWorld(true, benchWorldPhase);
+            loop.setBenchWorld(true, benchWorldPhase, benchSeed, benchOutDir);
         }
 
         // Direct/create mode skips the menu

@@ -197,6 +197,8 @@ public class GameLoop {
     // World benchmark mode
     private boolean benchWorld = false;
     private String benchWorldPhase = "BEFORE";
+    private long benchSeed = 42L;
+    private String benchOutDir = null;
     private com.voxelgame.bench.WorldBenchmark worldBenchmark = null;
 
     // Track which world is currently loaded
@@ -253,10 +255,12 @@ public class GameLoop {
     /** Set capture profile (BEFORE, AFTER_FOG, AFTER_EXPOSURE). Null = capture all. */
     public void setCaptureProfile(String profile) { this.captureProfileName = profile; }
     
-    /** Enable world streaming benchmark mode with phase identifier. */
-    public void setBenchWorld(boolean enabled, String phase) { 
+    /** Enable world streaming benchmark mode with phase identifier, seed, and output directory. */
+    public void setBenchWorld(boolean enabled, String phase, String seed, String outDir) { 
         this.benchWorld = enabled;
         this.benchWorldPhase = phase != null ? phase : "BEFORE";
+        this.benchSeed = seed != null ? Long.parseLong(seed) : 42L;
+        this.benchOutDir = outDir;
     }
 
     // Track create-new-world mode (--create flag)
@@ -688,8 +692,10 @@ public class GameLoop {
         
         // Initialize world benchmark if enabled
         if (benchWorld) {
-            String benchDir = "artifacts/world_bench/" + benchWorldPhase;
-            worldBenchmark = new com.voxelgame.bench.WorldBenchmark(chunkManager, world, player, benchDir);
+            String benchDir = benchOutDir != null ? benchOutDir : ("artifacts/world_bench/PROFILE_" + benchWorldPhase);
+            String gitHash = getGitHeadHash();
+            worldBenchmark = new com.voxelgame.bench.WorldBenchmark(
+                chunkManager, world, player, benchDir, benchWorldPhase, benchSeed, gitHash);
             worldBenchmark.start();
             // Enable flight for benchmark
             player.setGameMode(GameMode.CREATIVE);
@@ -2256,4 +2262,22 @@ public class GameLoop {
     public Window getWindow() { return window; }
     public Time getTime() { return time; }
     public Player getPlayer() { return player; }
+    
+    /** Get git HEAD hash for benchmark metadata. */
+    private String getGitHeadHash() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("git", "rev-parse", "HEAD");
+            pb.directory(new java.io.File("."));
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            try (java.io.BufferedReader r = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(p.getInputStream()))) {
+                String line = r.readLine();
+                p.waitFor();
+                return line != null ? line.trim() : "unknown";
+            }
+        } catch (Exception e) {
+            return "unknown";
+        }
+    }
 }

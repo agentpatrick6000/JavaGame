@@ -387,4 +387,5 @@ public class ChunkMesh {
 
     public boolean isEmpty() { return indexCount == 0; }
     public boolean isUploaded() { return uploaded; }
+    public int getIndexCount() { return indexCount; }
 }

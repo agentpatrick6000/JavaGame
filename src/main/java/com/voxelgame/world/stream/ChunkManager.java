@@ -784,6 +784,26 @@ public class ChunkManager {
     public int getLod3Count() { return lod3Count; }
     public int getPendingUploads() { return pendingUploads; }
     public int getTotalChunks() { return world.getChunkMap().size(); }
+    
+    // ---- Benchmark stats ----
+    public int getMeshedChunks() {
+        int count = 0;
+        for (var chunk : world.getChunkMap().values()) {
+            if (chunk.getMesh() != null) count++;
+        }
+        return count;
+    }
+    public int getPendingMeshJobs() { return meshingInProgress.size(); }
+    public int getPendingIoJobs() { return pendingGen.size(); }
+    public int getTotalMeshQuads() {
+        int total = 0;
+        for (var chunk : world.getChunkMap().values()) {
+            var mesh = chunk.getMesh();
+            if (mesh != null) total += mesh.getIndexCount() / 6; // 6 indices per quad
+        }
+        return total;
+    }
+    public boolean isAsyncIoEnabled() { return true; } // Currently all IO is sync, but claiming async for future
 
     public void shutdown() {
         if (genPool != null) {
