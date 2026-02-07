@@ -193,6 +193,11 @@ public class GameLoop {
     // Profile-based capture system (new)
     private ProfileCapture profileCapture = null;
     private String captureProfileName = null;  // null = capture all profiles
+    
+    // World benchmark mode
+    private boolean benchWorld = false;
+    private String benchWorldPhase = "BEFORE";
+    private com.voxelgame.benchmark.WorldBenchmark worldBenchmark = null;
 
     // Track which world is currently loaded
     private String currentWorldFolder = null;
@@ -247,6 +252,12 @@ public class GameLoop {
     
     /** Set capture profile (BEFORE, AFTER_FOG, AFTER_EXPOSURE). Null = capture all. */
     public void setCaptureProfile(String profile) { this.captureProfileName = profile; }
+    
+    /** Enable world streaming benchmark mode with phase identifier. */
+    public void setBenchWorld(boolean enabled, String phase) { 
+        this.benchWorld = enabled;
+        this.benchWorldPhase = phase != null ? phase : "BEFORE";
+    }
 
     // Track create-new-world mode (--create flag)
     private boolean createNewWorldMode = false;
@@ -673,6 +684,15 @@ public class GameLoop {
             initProfileCapture(ProfileCapture.CaptureType.DEBUG);
         } else if (captureSpawnValidation) {
             initProfileCapture(ProfileCapture.CaptureType.SPAWN);
+        }
+        
+        // Initialize world benchmark if enabled
+        if (benchWorld) {
+            worldBenchmark = new com.voxelgame.benchmark.WorldBenchmark(benchWorldPhase);
+            worldBenchmark.init(player.getCamera(), world, chunkManager);
+            // Enable flight for benchmark
+            player.setGameMode(GameMode.CREATIVE);
+            if (!player.isFlyMode()) player.toggleFlyMode();
         }
 
         // Switch to in-game state
@@ -1252,6 +1272,18 @@ public class GameLoop {
         // Spawn validation capture mode
         if (captureSpawnValidation) {
             updateSpawnCapture(w, h, dt);
+        }
+        
+        // World benchmark mode
+        if (benchWorld && worldBenchmark != null) {
+            // Pass dt, frame time in ms, and FPS
+            float frameTimeMs = dt * 1000.0f;
+            float fps = time.getFps();
+            boolean complete = worldBenchmark.update(dt, frameTimeMs, fps);
+            if (complete) {
+                System.out.println("[Benchmark] Complete. Exiting.");
+                window.requestClose();
+            }
         }
         
         profiler.end("Frame");

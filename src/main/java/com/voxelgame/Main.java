@@ -11,6 +11,7 @@ import com.voxelgame.core.GameLoop;
  *   java -jar voxelgame.jar --automation              # automation mode (direct to default world)
  *   java -jar voxelgame.jar --automation --script demo-script.txt
  *   java -jar voxelgame.jar --agent-server            # agent interface (direct to default world)
+ *   java -jar voxelgame.jar --bench-world [BEFORE|AFTER]  # world streaming benchmark
  */
 public class Main {
     public static void main(String[] args) {
@@ -23,11 +24,13 @@ public class Main {
         boolean captureSpawnValidation = false;
         boolean directMode = false;
         boolean createMode = false;
+        boolean benchWorldMode = false;
+        String benchWorldPhase = "BEFORE";
         String directWorldName = null;
         String scriptPath = null;
         String captureOutputDir = null;
         String captureSeed = null;
-        String captureProfile = null;  // New: --profile BEFORE/AFTER_FOG/AFTER_EXPOSURE
+        String captureProfile = null;  // --profile BEFORE/AFTER_FOG/AFTER_EXPOSURE
 
         // Parse command-line arguments
         for (int i = 0; i < args.length; i++) {
@@ -50,6 +53,14 @@ public class Main {
                 case "--profile" -> {
                     if (i + 1 < args.length) {
                         captureProfile = args[++i];
+                    }
+                }
+                case "--bench-world" -> {
+                    benchWorldMode = true;
+                    directMode = true;
+                    // Optional phase name: BEFORE or AFTER
+                    if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
+                        benchWorldPhase = args[++i].toUpperCase();
                     }
                 }
                 case "--create" -> {
@@ -92,6 +103,7 @@ public class Main {
                     System.out.println("  --capture-seed <seed>  Fixed seed for captures (default: 42)");
                     System.out.println("  --profile <name>       Capture profile: BEFORE, AFTER_FOG, AFTER_EXPOSURE");
                     System.out.println("                         (captures all profiles if not specified)");
+                    System.out.println("  --bench-world          Run world streaming benchmark (60s flight test)");
                     System.out.println("  --help, -h             Show this help message");
                     System.exit(0);
                 }
@@ -105,7 +117,7 @@ public class Main {
         }
 
         // Automation and agent-server modes imply direct mode
-        if (automationMode || agentServerMode || autoTestMode || captureDebugViews || captureSpawnValidation) {
+        if (automationMode || agentServerMode || autoTestMode || captureDebugViews || captureSpawnValidation || benchWorldMode) {
             directMode = true;
         }
 
@@ -135,6 +147,11 @@ public class Main {
         // Set capture profile if specified
         if (captureProfile != null) {
             loop.setCaptureProfile(captureProfile);
+        }
+        
+        // Set benchmark mode if requested
+        if (benchWorldMode) {
+            loop.setBenchWorld(true, benchWorldPhase);
         }
 
         // Direct/create mode skips the menu
