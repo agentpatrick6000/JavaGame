@@ -180,10 +180,18 @@ public class ChunkManager {
         processLODMeshUploads();
 
         // 3. Rebuild dirty chunks (block changes) — only for close chunks
+        // ASYNC FIX: Submit to mesh pool instead of blocking main thread
+        int dirtyRebuilds = 0;
         for (Chunk chunk : world.getLoadedChunks()) {
             if (chunk.isDirty() && chunk.getMesh() != null &&
-                chunk.getCurrentLOD() == LODLevel.LOD_0) {
-                buildMesh(chunk);
+                chunk.getCurrentLOD() == LODLevel.LOD_0 &&
+                dirtyRebuilds < 4) {  // Limit per-frame to avoid queue flood
+                ChunkPos pos = chunk.getPos();
+                if (!meshingInProgress.contains(pos)) {
+                    submitMeshJob(chunk, pos, false);
+                    chunk.setDirty(false);  // Clear dirty flag after submit
+                    dirtyRebuilds++;
+                }
             }
         }
 
@@ -376,33 +384,22 @@ public class ChunkManager {
                     if (!isClose && farEnqueued >= farMax) continue;
                     if (closeEnqueued + farEnqueued >= headroom) { budgetFull = true; break; }
 
-                    // Try loading from disk first
-                    if (saveManager != null) {
-                        Chunk loaded = saveManager.loadChunk(cx, cz);
-                        if (loaded != null) {
-                            loaded.setCurrentLOD(level);
-                            world.addChunk(pos, loaded);
-                            if (level == LODLevel.LOD_0) {
-                                Lighting.computeInitialSkyVisibility(loaded);
-                                Lighting.computeInitialBlockLight(loaded, world);
-                                // Create probe grid for close chunks
-                                if (probeManager != null) {
-                                    probeManager.onChunkLoaded(loaded, world, currentTimeOfDay);
-                                }
-                                submitMeshJob(loaded, pos, true);
-                            } else {
-                                submitLODMeshJob(loaded, pos, level);
-                            }
-                            if (isClose) closeEnqueued++; else farEnqueued++;
-                            continue;
-                        }
-                    }
-
-                    // Submit async generation task
+                    // Submit async load/generation task
+                    // ASYNC FIX: Now loads from disk on worker thread instead of blocking main thread
                     // Use simplified pipeline for distant chunks (LOD 2+)
                     final LODLevel genLevel = level;
                     final GenConfig cfg = genConfig;  // capture for lambda
+                    final SaveManager sm = saveManager;  // capture for lambda
                     Future<Chunk> future = genPool.submit(() -> {
+                        // ASYNC: Try loading from disk first (no longer blocks main thread!)
+                        if (sm != null) {
+                            Chunk loaded = sm.loadChunk(cx, cz);
+                            if (loaded != null) {
+                                loaded.setCurrentLOD(genLevel);
+                                return loaded;
+                            }
+                        }
+                        // Not on disk - generate new chunk
                         Chunk chunk = new Chunk(pos);
                         if (genLevel.level() >= 2) {
                             // Simplified: terrain + surface only (no caves/ores/trees)
@@ -695,6 +692,8 @@ public class ChunkManager {
      * Rebuild mesh for the chunk containing the given world coordinates.
      * Also rebuilds neighbor chunks if the block is on a chunk boundary.
      * Notifies probe manager of the block change for indirect lighting updates.
+     * 
+     * ASYNC FIX: Now submits async mesh job instead of blocking main thread.
      */
     public void rebuildMeshAt(int wx, int wy, int wz) {
         int cx = Math.floorDiv(wx, WorldConstants.CHUNK_SIZE);
@@ -709,14 +708,16 @@ public class ChunkManager {
 
         Chunk chunk = world.getChunk(cx, cz);
         if (chunk != null) {
-            buildMesh(chunk);
+            // ASYNC: Submit to mesh pool instead of sync rebuild
+            ChunkPos pos = new ChunkPos(cx, cz);
+            submitMeshJob(chunk, pos, false);
         }
 
-        // Rebuild neighbors if on boundary
-        if (lx == 0) rebuildChunk(cx - 1, cz);
-        if (lx == WorldConstants.CHUNK_SIZE - 1) rebuildChunk(cx + 1, cz);
-        if (lz == 0) rebuildChunk(cx, cz - 1);
-        if (lz == WorldConstants.CHUNK_SIZE - 1) rebuildChunk(cx, cz + 1);
+        // Rebuild neighbors if on boundary (async)
+        if (lx == 0) rebuildChunkAsync(cx - 1, cz);
+        if (lx == WorldConstants.CHUNK_SIZE - 1) rebuildChunkAsync(cx + 1, cz);
+        if (lz == 0) rebuildChunkAsync(cx, cz - 1);
+        if (lz == WorldConstants.CHUNK_SIZE - 1) rebuildChunkAsync(cx, cz + 1);
     }
     
     /**
@@ -734,16 +735,32 @@ public class ChunkManager {
 
     /**
      * Rebuild meshes for all chunks in the given set.
+     * ASYNC FIX: Now submits async mesh jobs instead of blocking.
      */
     public void rebuildChunks(Set<ChunkPos> positions) {
         for (ChunkPos pos : positions) {
             Chunk chunk = world.getChunk(pos.x(), pos.z());
             if (chunk != null) {
-                buildMesh(chunk);
+                submitMeshJob(chunk, pos, false);
             }
         }
     }
 
+    /**
+     * Async version of rebuildChunk - submits to mesh pool.
+     */
+    private void rebuildChunkAsync(int cx, int cz) {
+        Chunk chunk = world.getChunk(cx, cz);
+        if (chunk != null) {
+            ChunkPos pos = new ChunkPos(cx, cz);
+            submitMeshJob(chunk, pos, false);
+        }
+    }
+
+    /**
+     * @deprecated Use rebuildChunkAsync instead to avoid blocking main thread.
+     */
+    @Deprecated
     private void rebuildChunk(int cx, int cz) {
         Chunk chunk = world.getChunk(cx, cz);
         if (chunk != null) {

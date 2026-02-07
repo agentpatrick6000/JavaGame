@@ -197,7 +197,7 @@ public class GameLoop {
     // World benchmark mode
     private boolean benchWorld = false;
     private String benchWorldPhase = "BEFORE";
-    private com.voxelgame.benchmark.WorldBenchmark worldBenchmark = null;
+    private com.voxelgame.bench.WorldBenchmark worldBenchmark = null;
 
     // Track which world is currently loaded
     private String currentWorldFolder = null;
@@ -688,8 +688,9 @@ public class GameLoop {
         
         // Initialize world benchmark if enabled
         if (benchWorld) {
-            worldBenchmark = new com.voxelgame.benchmark.WorldBenchmark(benchWorldPhase);
-            worldBenchmark.init(player.getCamera(), world, chunkManager);
+            String benchDir = "artifacts/world_bench/" + benchWorldPhase;
+            worldBenchmark = new com.voxelgame.bench.WorldBenchmark(chunkManager, world, player, benchDir);
+            worldBenchmark.start();
             // Enable flight for benchmark
             player.setGameMode(GameMode.CREATIVE);
             if (!player.isFlyMode()) player.toggleFlyMode();
@@ -1276,11 +1277,9 @@ public class GameLoop {
         
         // World benchmark mode
         if (benchWorld && worldBenchmark != null) {
-            // Pass dt, frame time in ms, and FPS
-            float frameTimeMs = dt * 1000.0f;
-            float fps = time.getFps();
-            boolean complete = worldBenchmark.update(dt, frameTimeMs, fps);
-            if (complete) {
+            worldBenchmark.update(dt, time.getFps());
+            if (worldBenchmark.isComplete()) {
+                worldBenchmark.finish();
                 System.out.println("[Benchmark] Complete. Exiting.");
                 window.requestClose();
             }
