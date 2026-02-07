@@ -193,6 +193,11 @@ public class WorldBenchmark {
             pw.println("  \"git_head_hash\": \"" + gitHash + "\",");
             pw.println("  \"profile_name\": \"" + profileName + "\",");
             pw.println("  \"seed\": " + seed + ",");
+            pw.println("  \"bench_fixes\": {");
+            pw.println("    \"FIX_MESH_PRIMITIVE_BUFFERS\": " + BenchFixes.FIX_MESH_PRIMITIVE_BUFFERS + ",");
+            pw.println("    \"FIX_CHUNKPOS_PACKED\": " + BenchFixes.FIX_CHUNKPOS_PACKED + ",");
+            pw.println("    \"FIX_ASYNC_REGION_IO\": " + BenchFixes.FIX_ASYNC_REGION_IO);
+            pw.println("  },");
             pw.println("  \"camera_path\": {");
             pw.println("    \"type\": \"spiral\",");
             pw.println("    \"start_pos\": [" + START_X + ", " + FLIGHT_Y + ", " + START_Z + "],");

@@ -1,0 +1,59 @@
+> Task :compileJava UP-TO-DATE
+> Task :processResources UP-TO-DATE
+> Task :classes UP-TO-DATE
+
+> Task :run
+VoxelGame starting...
+TextureAtlas loaded from terrain.png: 128x256 (128 tiles)
+ShadowRenderer initialized: 3 cascades @ 2048x2048
+[GameMode] SURVIVAL -> CREATIVE (invuln=true, flight=true)
+[Difficulty] NORMAL -> NORMAL (env=1.0x, mob=1.0x)
+Restored player inventory (9 used slots)
+Loaded world 'default' (seed=12345)
+[ChestManager] Loaded 0 chests
+[FurnaceManager] Loaded 0 furnaces
+[2026-02-07T12:35:33.189360Z] [Benchmark] Started
+[2026-02-07T12:35:33.190649Z] [Benchmark] Profile: AFTER
+[2026-02-07T12:35:33.191204Z] [Benchmark] Seed: 42
+[2026-02-07T12:35:33.191237Z] [Benchmark] Duration: 60s
+[2026-02-07T12:35:33.191284Z] [Benchmark] Output: artifacts/world_bench/FIX_A_AFTER
+[GameMode] CREATIVE -> CREATIVE (invuln=true, flight=true)
+Game started — world: default
+VoxelGame initialized — direct world: default
+[Spawn] Sheep spawned at (-18.1, 87, -27.3) light=15
+[ChunkPerf] loaded=1328 pending=0 cap=1382 maxDist=20 LOD[0/1/2/3]=171/171/351/635 uploads=0
+[Spawn] Chicken spawned at (35.3, 72, -58.2) light=15
+[Spawn] Chicken spawned at (13.1, 74, 66.8) light=15
+[ChunkPerf] loaded=1381 pending=0 cap=1382 maxDist=20 LOD[0/1/2/3]=168/171/329/713 uploads=0
+[Despawn] CHICKEN despawned at (35.6, 72.0, -60.7) — too far
+[Despawn] CHICKEN despawned at (14.3, 74.0, 66.8) — too far
+[Spawn] Sheep spawned at (-76.0, 69, 2.6) light=15
+[Spawn] Sheep spawned at (22.5, 81, -6.9) light=15
+[ChunkPerf] loaded=1382 pending=0 cap=1382 maxDist=20 LOD[0/1/2/3]=160/180/320/722 uploads=0
+[Despawn] SHEEP despawned at (-19.3, 86.0, -33.5) — too far
+[Despawn] SHEEP despawned at (-76.2, 69.0, 1.6) — too far
+[Spawn] Cow spawned at (-42.6, 84, 33.9) light=15
+[Spawn] Cow spawned at (4.6, 84, -61.0) light=15
+[ChunkPerf] loaded=1382 pending=0 cap=1382 maxDist=20 LOD[0/1/2/3]=168/171/317/726 uploads=0
+[Despawn] COW despawned at (-42.5, 83.0, 30.8) — too far
+[Despawn] COW despawned at (4.2, 84.0, -60.7) — too far
+[Spawn] Cow spawned at (85.3, 72, 0.1) light=15
+[Spawn] Cow spawned at (-74.8, 69, -27.7) light=15
+[ChunkPerf] loaded=1382 pending=0 cap=1382 maxDist=20 LOD[0/1/2/3]=168/171/317/726 uploads=0
+[Despawn] COW despawned at (87.0, 72.0, -1.5) — too far
+[Despawn] COW despawned at (-74.4, 69.0, -28.9) — too far
+[Spawn] Sheep spawned at (-5.2, 82, -58.0) light=15
+[Spawn] Pig spawned at (-16.7, 99, 24.6) light=15
+[ChunkPerf] loaded=1382 pending=0 cap=1382 maxDist=20 LOD[0/1/2/3]=168/171/317/713 uploads=0
+[FurnaceManager] Saved 0 furnaces
+[ChestManager] Saved 0 chests
+[2026-02-07T12:36:33.210166Z] [Benchmark] Complete. Writing results...
+[2026-02-07T12:36:33.226774Z] [Benchmark] Results written to: artifacts/world_bench/FIX_A_AFTER
+[Benchmark] Complete. Exiting.
+Saving world on exit...
+[FurnaceManager] Saved 0 furnaces
+[ChestManager] Saved 0 chests
+Saved 1382 chunks on exit
+
+BUILD SUCCESSFUL in 1m 4s
+3 actionable tasks: 1 executed, 2 up-to-date

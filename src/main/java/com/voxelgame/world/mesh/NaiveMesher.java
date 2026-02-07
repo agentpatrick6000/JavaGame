@@ -1,5 +1,6 @@
 package com.voxelgame.world.mesh;
 
+import com.voxelgame.bench.BenchFixes;
 import com.voxelgame.render.TextureAtlas;
 import com.voxelgame.world.*;
 import com.voxelgame.world.lighting.ProbeManager;
@@ -189,6 +190,11 @@ public class NaiveMesher implements Mesher {
 
     @Override
     public RawMeshResult meshAllRaw(Chunk chunk, WorldAccess world) {
+        // Dispatch to primitive buffer version if toggle enabled
+        if (BenchFixes.FIX_MESH_PRIMITIVE_BUFFERS) {
+            return meshAllRawPrimitive(chunk, world);
+        }
+        
         // Separate lists for opaque and transparent geometry
         List<Float> opaqueVerts = new ArrayList<>();
         List<Integer> opaqueIndices = new ArrayList<>();
@@ -407,6 +413,338 @@ public class NaiveMesher implements Mesher {
             idxArray[i] = indices.get(i);
         }
         return new MeshData(vertArray, idxArray);
+    }
+    
+    // =============== PRIMITIVE BUFFER VERSION (Fix A) ===============
+    
+    /**
+     * Primitive buffer version of meshAllRaw - zero boxing overhead.
+     * Uses FloatArrayBuilder/IntArrayBuilder instead of ArrayList<Float>/ArrayList<Integer>.
+     */
+    private RawMeshResult meshAllRawPrimitive(Chunk chunk, WorldAccess world) {
+        FloatArrayBuilder opaqueVerts = new FloatArrayBuilder(65536);
+        IntArrayBuilder opaqueIndices = new IntArrayBuilder(32768);
+        int opaqueVertexCount = 0;
+
+        FloatArrayBuilder transVerts = new FloatArrayBuilder(16384);
+        IntArrayBuilder transIndices = new IntArrayBuilder(8192);
+        int transVertexCount = 0;
+
+        ChunkPos pos = chunk.getPos();
+        int cx = pos.x() * WorldConstants.CHUNK_SIZE;
+        int cz = pos.z() * WorldConstants.CHUNK_SIZE;
+
+        for (int x = 0; x < WorldConstants.CHUNK_SIZE; x++) {
+            for (int y = 0; y < WorldConstants.WORLD_HEIGHT; y++) {
+                for (int z = 0; z < WorldConstants.CHUNK_SIZE; z++) {
+                    int blockId = chunk.getBlock(x, y, z);
+                    if (blockId == 0) continue;
+
+                    Block block = Blocks.get(blockId);
+                    if (!block.solid() && !block.transparent()) continue;
+
+                    boolean isTransparent = block.transparent() && !block.solid();
+                    FloatArrayBuilder verts = isTransparent ? transVerts : opaqueVerts;
+                    IntArrayBuilder indices = isTransparent ? transIndices : opaqueIndices;
+
+                    float wx = cx + x;
+                    float wy = y;
+                    float wz = cz + z;
+
+                    if (blockId == Blocks.TORCH.id() || blockId == Blocks.REDSTONE_TORCH.id()) {
+                        opaqueVertexCount = meshTorchPrimitive(opaqueVerts, opaqueIndices, opaqueVertexCount,
+                                                                wx, wy, wz, block, atlas);
+                        continue;
+                    }
+
+                    if (Blocks.isFlower(blockId)) {
+                        opaqueVertexCount = meshCrossPrimitive(opaqueVerts, opaqueIndices, opaqueVertexCount,
+                                                                wx, wy, wz, block, atlas);
+                        continue;
+                    }
+
+                    if (Blocks.isWheatCrop(blockId)) {
+                        opaqueVertexCount = meshCrossPrimitive(opaqueVerts, opaqueIndices, opaqueVertexCount,
+                                                                wx, wy, wz, block, atlas);
+                        continue;
+                    }
+
+                    if (Blocks.isRail(blockId)) {
+                        opaqueVertexCount = meshFlatQuadPrimitive(opaqueVerts, opaqueIndices, opaqueVertexCount,
+                                                                   wx, wy, wz, block, atlas);
+                        continue;
+                    }
+
+                    if (blockId == Blocks.REDSTONE_WIRE.id()) {
+                        opaqueVertexCount = meshFlatQuadPrimitive(opaqueVerts, opaqueIndices, opaqueVertexCount,
+                                                                   wx, wy, wz, block, atlas);
+                        continue;
+                    }
+
+                    if (blockId == Blocks.REDSTONE_REPEATER.id()) {
+                        transVertexCount = meshFlatSlabPrimitive(transVerts, transIndices, transVertexCount,
+                                                                  wx, wy, wz, block, atlas);
+                        continue;
+                    }
+
+                    for (int face = 0; face < 6; face++) {
+                        int nx = x + FACE_NORMALS[face][0];
+                        int ny = y + FACE_NORMALS[face][1];
+                        int nz = z + FACE_NORMALS[face][2];
+
+                        int neighborId;
+                        if (nx >= 0 && nx < WorldConstants.CHUNK_SIZE &&
+                            ny >= 0 && ny < WorldConstants.WORLD_HEIGHT &&
+                            nz >= 0 && nz < WorldConstants.CHUNK_SIZE) {
+                            neighborId = chunk.getBlock(nx, ny, nz);
+                        } else {
+                            neighborId = world.getBlock(cx + nx, ny, cz + nz);
+                        }
+
+                        Block neighbor = Blocks.get(neighborId);
+                        if (neighbor.solid() && !neighbor.transparent()) continue;
+                        if (blockId == neighborId && neighbor.transparent()) continue;
+
+                        int texIdx = block.getTextureIndex(face);
+                        float[] uv = atlas.getUV(texIdx);
+                        float dirLight = FACE_LIGHT[face];
+
+                        int[][][] aoOffsets = AO_OFFSETS[face];
+                        float[] vertSkyLight = new float[4];
+                        float[][] vertBlockLightRGB = new float[4][3];
+                        int[] aoValues = new int[4];
+                        float[] vertHorizonWeight = new float[4];
+                        
+                        for (int v = 0; v < 4; v++) {
+                            boolean side1 = isOccluder(world, cx + x, y, cz + z, aoOffsets[v][0]);
+                            boolean side2 = isOccluder(world, cx + x, y, cz + z, aoOffsets[v][1]);
+                            boolean corner = isOccluder(world, cx + x, y, cz + z, aoOffsets[v][2]);
+
+                            int ao;
+                            if (side1 && side2) {
+                                ao = 3;
+                            } else {
+                                ao = (side1 ? 1 : 0) + (side2 ? 1 : 0) + (corner ? 1 : 0);
+                            }
+                            aoValues[v] = ao;
+
+                            float aoFactor = AO_LEVELS[ao];
+                            
+                            int sampleX = cx + x + FACE_NORMALS[face][0];
+                            int sampleY = y + FACE_NORMALS[face][1];
+                            int sampleZ = cz + z + FACE_NORMALS[face][2];
+                            
+                            float existingVis = getSkyVisibilitySafe(world, sampleX, sampleY, sampleZ);
+                            HeightfieldVisibility.VisibilityResult visResult = 
+                                HeightfieldVisibility.computeWithHint(world, sampleX, sampleY, sampleZ, existingVis);
+                            
+                            float skyVis = visResult.visibility;
+                            vertHorizonWeight[v] = visResult.horizonWeight;
+                            
+                            float[] blockLightRGB = sampleVertexBlockLightRGB(world, cx + x, y, cz + z,
+                                                                               face, aoOffsets[v]);
+
+                            vertSkyLight[v] = dirLight * aoFactor * skyVis;
+                            vertBlockLightRGB[v][0] = dirLight * aoFactor * blockLightRGB[0];
+                            vertBlockLightRGB[v][1] = dirLight * aoFactor * blockLightRGB[1];
+                            vertBlockLightRGB[v][2] = dirLight * aoFactor * blockLightRGB[2];
+                        }
+
+                        float[][] fv = FACE_VERTICES[face];
+                        int[][] fuv = FACE_UV[face];
+
+                        float faceX = wx + 0.5f + FACE_NORMALS[face][0] * 0.5f;
+                        float faceY = wy + 0.5f + FACE_NORMALS[face][1] * 0.5f;
+                        float faceZ = wz + 0.5f + FACE_NORMALS[face][2] * 0.5f;
+                        float[] indirect = sampleIndirect(faceX, faceY, faceZ);
+
+                        int baseVertex = isTransparent ? transVertexCount : opaqueVertexCount;
+                        for (int v = 0; v < 4; v++) {
+                            float u = (fuv[v][0] == 0) ? uv[0] : uv[2];
+                            float vCoord = (fuv[v][1] == 0) ? uv[1] : uv[3];
+                            addVertexPrimitive(verts, wx + fv[v][0], wy + fv[v][1], wz + fv[v][2],
+                                              u, vCoord, vertSkyLight[v], 
+                                              vertBlockLightRGB[v][0], vertBlockLightRGB[v][1], vertBlockLightRGB[v][2],
+                                              vertHorizonWeight[v],
+                                              indirect[0], indirect[1], indirect[2]);
+                        }
+                        if (isTransparent) {
+                            transVertexCount += 4;
+                        } else {
+                            opaqueVertexCount += 4;
+                        }
+
+                        if (aoValues[0] + aoValues[2] > aoValues[1] + aoValues[3]) {
+                            indices.add(baseVertex + 1, baseVertex + 2, baseVertex + 3);
+                            indices.add(baseVertex + 1, baseVertex + 3, baseVertex);
+                        } else {
+                            indices.add(baseVertex, baseVertex + 1, baseVertex + 2);
+                            indices.add(baseVertex, baseVertex + 2, baseVertex + 3);
+                        }
+                    }
+                }
+            }
+        }
+
+        MeshData opaqueData = new MeshData(opaqueVerts.toArray(), opaqueIndices.toArray());
+        MeshData transparentData = new MeshData(transVerts.toArray(), transIndices.toArray());
+        return new RawMeshResult(opaqueData, transparentData);
+    }
+    
+    private void addVertexPrimitive(FloatArrayBuilder verts, float x, float y, float z,
+                                    float u, float v, float skyVisibility, 
+                                    float blockLightR, float blockLightG, float blockLightB,
+                                    float horizonWeight,
+                                    float indirectR, float indirectG, float indirectB) {
+        verts.add(x);
+        verts.add(y);
+        verts.add(z);
+        verts.add(u);
+        verts.add(v);
+        verts.add(skyVisibility);
+        verts.add(blockLightR);
+        verts.add(blockLightG);
+        verts.add(blockLightB);
+        verts.add(horizonWeight);
+        verts.add(indirectR);
+        verts.add(indirectG);
+        verts.add(indirectB);
+    }
+    
+    private void addQuadIndicesPrimitive(IntArrayBuilder indices, int base) {
+        indices.add(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+    
+    private int meshTorchPrimitive(FloatArrayBuilder verts, IntArrayBuilder indices, int vertexCount,
+                                    float wx, float wy, float wz, Block block, TextureAtlas atlas) {
+        float[] uv = atlas.getUV(block.getTextureIndex(0));
+        float skyL = 1.0f;
+        float hrzW = 0.3f;
+        float[] torchColor = LightEmitters.getLightColorRGB(block.id());
+        float blkR = torchColor != null ? torchColor[0] : 1.0f;
+        float blkG = torchColor != null ? torchColor[1] : 0.8f;
+        float blkB = torchColor != null ? torchColor[2] : 0.5f;
+        
+        float pad = 6.0f / 16.0f;
+        float x0 = wx + pad, x1 = wx + 1.0f - pad;
+        float z0 = wz + pad, z1 = wz + 1.0f - pad;
+        float y0 = wy, y1 = wy + 10.0f / 16.0f;
+        float u0 = uv[0], v0 = uv[1], u1 = uv[2], v1 = uv[3];
+        
+        int base = vertexCount;
+        // Top (+Y)
+        addVertexPrimitive(verts, x0, y1, z0, u0, v0, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x0, y1, z1, u0, v1, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x1, y1, z1, u1, v1, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x1, y1, z0, u1, v0, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addQuadIndicesPrimitive(indices, base); base += 4;
+        // Bottom (-Y)
+        addVertexPrimitive(verts, x0, y0, z1, u0, v0, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x0, y0, z0, u0, v1, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x1, y0, z0, u1, v1, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x1, y0, z1, u1, v0, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addQuadIndicesPrimitive(indices, base); base += 4;
+        // North (-Z)
+        addVertexPrimitive(verts, x1, y1, z0, u0, v0, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x1, y0, z0, u0, v1, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x0, y0, z0, u1, v1, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x0, y1, z0, u1, v0, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addQuadIndicesPrimitive(indices, base); base += 4;
+        // South (+Z)
+        addVertexPrimitive(verts, x0, y1, z1, u0, v0, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x0, y0, z1, u0, v1, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x1, y0, z1, u1, v1, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x1, y1, z1, u1, v0, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addQuadIndicesPrimitive(indices, base); base += 4;
+        // East (+X)
+        addVertexPrimitive(verts, x1, y1, z1, u0, v0, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x1, y0, z1, u0, v1, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x1, y0, z0, u1, v1, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x1, y1, z0, u1, v0, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addQuadIndicesPrimitive(indices, base); base += 4;
+        // West (-X)
+        addVertexPrimitive(verts, x0, y1, z0, u0, v0, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x0, y0, z0, u0, v1, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x0, y0, z1, u1, v1, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addVertexPrimitive(verts, x0, y1, z1, u1, v0, skyL, blkR, blkG, blkB, hrzW, 0, 0, 0);
+        addQuadIndicesPrimitive(indices, base);
+        
+        return vertexCount + 24;
+    }
+    
+    private int meshCrossPrimitive(FloatArrayBuilder verts, IntArrayBuilder indices, int vertexCount,
+                                    float wx, float wy, float wz, Block block, TextureAtlas atlas) {
+        float[] uv = atlas.getUV(block.getTextureIndex(0));
+        float skyL = 1.0f;
+        float hrzW = 0.5f;
+        float[] blkL = {0, 0, 0};
+        
+        float[][] crossVerts = {
+            {0, 0, 0}, {1, 0, 1}, {1, 1, 1}, {0, 1, 0},
+            {1, 0, 0}, {0, 0, 1}, {0, 1, 1}, {1, 1, 0}
+        };
+        int[][] crossUV = {{0, 1}, {1, 1}, {1, 0}, {0, 0}};
+        
+        for (int q = 0; q < 2; q++) {
+            for (int v = 0; v < 4; v++) {
+                int idx = q * 4 + v;
+                float vx = wx + crossVerts[idx][0];
+                float vy = wy + crossVerts[idx][1];
+                float vz = wz + crossVerts[idx][2];
+                float u = (crossUV[v][0] == 0) ? uv[0] : uv[2];
+                float vCoord = (crossUV[v][1] == 0) ? uv[1] : uv[3];
+                addVertexPrimitive(verts, vx, vy, vz, u, vCoord, skyL, blkL[0], blkL[1], blkL[2], hrzW, 0, 0, 0);
+            }
+            addQuadIndicesPrimitive(indices, vertexCount);
+            vertexCount += 4;
+        }
+        return vertexCount;
+    }
+    
+    private int meshFlatQuadPrimitive(FloatArrayBuilder verts, IntArrayBuilder indices, int vertexCount,
+                                       float wx, float wy, float wz, Block block, TextureAtlas atlas) {
+        float[] uv = atlas.getUV(block.getTextureIndex(0));
+        float skyL = 1.0f;
+        float hrzW = 0.5f;
+        float[] blkL = {0, 0, 0};
+        float yOffset = 0.01f;
+        
+        float[][] quadVerts = {{0, yOffset, 0}, {1, yOffset, 0}, {1, yOffset, 1}, {0, yOffset, 1}};
+        int[][] quadUV = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+        
+        for (int v = 0; v < 4; v++) {
+            float vx = wx + quadVerts[v][0];
+            float vy = wy + quadVerts[v][1];
+            float vz = wz + quadVerts[v][2];
+            float u = (quadUV[v][0] == 0) ? uv[0] : uv[2];
+            float vCoord = (quadUV[v][1] == 0) ? uv[1] : uv[3];
+            addVertexPrimitive(verts, vx, vy, vz, u, vCoord, skyL, blkL[0], blkL[1], blkL[2], hrzW, 0, 0, 0);
+        }
+        addQuadIndicesPrimitive(indices, vertexCount);
+        return vertexCount + 4;
+    }
+    
+    private int meshFlatSlabPrimitive(FloatArrayBuilder verts, IntArrayBuilder indices, int vertexCount,
+                                       float wx, float wy, float wz, Block block, TextureAtlas atlas) {
+        float[] uv = atlas.getUV(block.getTextureIndex(0));
+        float skyL = 1.0f;
+        float hrzW = 0.5f;
+        float[] blkL = {0, 0, 0};
+        float slabHeight = 2f / 16f;
+        
+        float[][] topVerts = {{0, slabHeight, 0}, {1, slabHeight, 0}, {1, slabHeight, 1}, {0, slabHeight, 1}};
+        int[][] quadUV = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+        
+        for (int v = 0; v < 4; v++) {
+            float vx = wx + topVerts[v][0];
+            float vy = wy + topVerts[v][1];
+            float vz = wz + topVerts[v][2];
+            float u = (quadUV[v][0] == 0) ? uv[0] : uv[2];
+            float vCoord = (quadUV[v][1] == 0) ? uv[1] : uv[3];
+            addVertexPrimitive(verts, vx, vy, vz, u, vCoord, skyL, blkL[0], blkL[1], blkL[2], hrzW, 0, 0, 0);
+        }
+        addQuadIndicesPrimitive(indices, vertexCount);
+        return vertexCount + 4;
     }
 
     /**

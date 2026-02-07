@@ -75,6 +75,11 @@ public class Main {
                         benchOutDir = args[++i];
                     }
                 }
+                case "--bench-fix" -> {
+                    if (i + 1 < args.length) {
+                        com.voxelgame.bench.BenchFixes.parse(args[++i]);
+                    }
+                }
                 case "--create" -> {
                     createMode = true;
                     directMode = true;

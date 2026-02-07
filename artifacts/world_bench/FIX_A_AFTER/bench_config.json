@@ -1,0 +1,30 @@
+{
+  "git_head_hash": "39a40bba6635f1661dc0a183c779dd96d4534bf1",
+  "profile_name": "AFTER",
+  "seed": 42,
+  "bench_fixes": {
+    "FIX_MESH_PRIMITIVE_BUFFERS": true,
+    "FIX_CHUNKPOS_PACKED": false,
+    "FIX_ASYNC_REGION_IO": false
+  },
+  "camera_path": {
+    "type": "spiral",
+    "start_pos": [0.0, 100.0, 0.0],
+    "flight_speed": 20.0,
+    "turn_rate": 0.5
+  },
+  "duration_s": 60,
+  "sample_hz": 10,
+  "render_distance_chunks": 20,
+  "lod_settings": {
+    "lod_threshold": 8,
+    "lod2_start": 11,
+    "lod3_start": 15,
+    "max_loaded_chunks": 1382
+  },
+  "io_settings": {
+    "sync_mode": "async",
+    "region_format": "gzip",
+    "cache_size": 0
+  }
+}
