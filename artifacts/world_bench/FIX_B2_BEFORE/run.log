@@ -1,0 +1,6 @@
+[2026-02-07T19:18:01.551269Z] [Benchmark] Started
+[2026-02-07T19:18:01.552544Z] [Benchmark] Profile: BEFORE
+[2026-02-07T19:18:01.553083Z] [Benchmark] Seed: 42
+[2026-02-07T19:18:01.553113Z] [Benchmark] Duration: 60s
+[2026-02-07T19:18:01.553150Z] [Benchmark] Output: artifacts/world_bench/FIX_B2_BEFORE
+[2026-02-07T19:19:01.572891Z] [Benchmark] Complete. Writing results...

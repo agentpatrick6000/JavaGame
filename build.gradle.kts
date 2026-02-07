@@ -53,6 +53,9 @@ dependencies {
 
     // Java-WebSocket (agent interface)
     implementation("org.java-websocket:Java-WebSocket:1.5.6")
+    
+    // FastUtil (primitive collections - no boxing)
+    implementation("it.unimi.dsi:fastutil:8.5.12")
 }
 
 tasks.withType<JavaCompile> {

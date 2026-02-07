@@ -1,9 +1,12 @@
 package com.voxelgame.world;
 
 import com.voxelgame.bench.BenchFixes;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 
 import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * The game world. Owns all loaded chunks, provides block and light access across chunk boundaries.
@@ -12,23 +15,30 @@ public class World implements WorldAccess {
 
     private final ConcurrentHashMap<ChunkPos, Chunk> chunks = new ConcurrentHashMap<>();
     
-    // Fix B: Parallel map using packed long keys (no allocation on lookup)
-    private final ConcurrentHashMap<Long, Chunk> chunksByKey = new ConcurrentHashMap<>();
+    // Fix B2: Primitive-keyed chunk map (no boxing on lookup)
+    // Uses ReadWriteLock: reads are concurrent, writes are exclusive
+    private final Long2ObjectOpenHashMap<Chunk> primitiveChunks = new Long2ObjectOpenHashMap<>();
+    private final ReadWriteLock primitiveChunksLock = new ReentrantReadWriteLock();
     
-    /** Pack chunk coordinates into a long key (no allocation). */
-    public static long packChunkKey(int cx, int cz) {
+    /** Pack chunk coordinates into a long key (pure math, no allocation). */
+    public static long key(int cx, int cz) {
         return (((long) cx) << 32) | (cz & 0xFFFFFFFFL);
     }
     
-    /** Get chunk by packed key (no allocation). */
-    public Chunk getChunkByKey(long key) {
-        return chunksByKey.get(key);
+    /** Get chunk by packed key using primitive map (no boxing). */
+    private Chunk getChunkPrimitive(long k) {
+        primitiveChunksLock.readLock().lock();
+        try {
+            return primitiveChunks.get(k);
+        } finally {
+            primitiveChunksLock.readLock().unlock();
+        }
     }
     
-    /** Get chunk by chunk coords (uses packed key when FIX_CHUNKPOS_NO_ALLOC is enabled). */
+    /** Get chunk by chunk coords - dispatches based on toggle. */
     private Chunk getChunkInternal(int cx, int cz) {
-        if (BenchFixes.FIX_CHUNKPOS_NO_ALLOC) {
-            return chunksByKey.get(packChunkKey(cx, cz));
+        if (BenchFixes.FIX_B2_PRIMITIVE_MAP) {
+            return getChunkPrimitive(key(cx, cz));
         } else {
             return chunks.get(new ChunkPos(cx, cz));
         }
@@ -199,8 +209,13 @@ public class World implements WorldAccess {
 
     @Override
     public boolean isLoaded(int cx, int cz) {
-        if (BenchFixes.FIX_CHUNKPOS_NO_ALLOC) {
-            return chunksByKey.containsKey(packChunkKey(cx, cz));
+        if (BenchFixes.FIX_B2_PRIMITIVE_MAP) {
+            primitiveChunksLock.readLock().lock();
+            try {
+                return primitiveChunks.containsKey(key(cx, cz));
+            } finally {
+                primitiveChunksLock.readLock().unlock();
+            }
         } else {
             return chunks.containsKey(new ChunkPos(cx, cz));
         }
@@ -208,12 +223,24 @@ public class World implements WorldAccess {
 
     public void addChunk(ChunkPos pos, Chunk chunk) {
         chunks.put(pos, chunk);
-        chunksByKey.put(packChunkKey(pos.x(), pos.z()), chunk);
+        // Also add to primitive map for FIX_B2
+        primitiveChunksLock.writeLock().lock();
+        try {
+            primitiveChunks.put(key(pos.x(), pos.z()), chunk);
+        } finally {
+            primitiveChunksLock.writeLock().unlock();
+        }
     }
 
     public void removeChunk(ChunkPos pos) {
         Chunk chunk = chunks.remove(pos);
-        chunksByKey.remove(packChunkKey(pos.x(), pos.z()));
+        // Also remove from primitive map
+        primitiveChunksLock.writeLock().lock();
+        try {
+            primitiveChunks.remove(key(pos.x(), pos.z()));
+        } finally {
+            primitiveChunksLock.writeLock().unlock();
+        }
         if (chunk != null) {
             chunk.dispose();
         }
