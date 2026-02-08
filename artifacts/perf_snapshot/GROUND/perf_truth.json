@@ -1,0 +1,59 @@
+{
+  "metadata": {
+    "git_hash": "3e6b93a",
+    "scenario": "GROUND",
+    "duration_seconds": 10,
+    "sample_count": 239,
+    "seed": 12345,
+    "capture_timestamp": "2026-02-08T16:59:15.015361Z"
+  },
+
+  "environment": {
+    "vsync_enabled": true,
+    "window_mode": "windowed",
+    "resolution": "1920x858",
+    "shadows_enabled": true,
+    "postfx_enabled": false,
+    "gpu_timing_available": true
+  },
+
+  "frame_wall_ms": {
+    "avg": 41.641,
+    "p50": 39.825,
+    "p95": 64.188,
+    "p99": 66.500,
+    "max": 83.040
+  },
+
+  "fps_avg": 24.02,
+  "fps_1pct_low": 15.04,
+
+  "swap_ms": {
+    "avg": 0.491,
+    "p50": 0.360,
+    "p95": 0.551,
+    "p99": 1.982,
+    "max": 20.332
+  },
+
+  "gpu_ms": {
+    "avg": 0.000,
+    "p50": 0.000,
+    "p95": 0.000,
+    "p99": 0.000,
+    "max": 0.000
+  },
+
+  "cpu_ms": {
+    "update_avg": 4.041,
+    "render_avg": 6.931
+  },
+
+  "gc_total_ms": 71.000,
+
+  "verdict": {
+    "bottleneck": "CPU",
+    "p99_dominated_by": "swap",
+    "recommendation": "CPU bound. Profile subsystems to find spike sources."
+  }
+}
