@@ -103,6 +103,9 @@ public class Renderer {
 
     // ---- Render stats ----
     private int renderedChunks;
+    private int drawCalls;
+    private int triangleCount;
+    private long bytesUploaded;
     private int culledChunks;
 
     public Renderer(World world) {
@@ -380,6 +383,9 @@ public class Renderer {
 
         renderedChunks = 0;
         culledChunks = 0;
+        drawCalls = 0;
+        triangleCount = 0;
+        bytesUploaded = 0;
 
         // ---- Pass 1: Opaque geometry (all LOD levels) ----
         // Includes alpha-discard geometry (torches, flowers, rails) which need both-side rendering.
@@ -409,6 +415,8 @@ public class Renderer {
             if (mesh != null && !mesh.isEmpty()) {
                 mesh.draw();
                 renderedChunks++;
+                drawCalls++;
+                triangleCount += mesh.getIndexCount() / 3;
             }
         }
 
@@ -448,6 +456,9 @@ public class Renderer {
 
     public TextureAtlas getAtlas() { return atlas; }
     public int getRenderedChunks() { return renderedChunks; }
+    public int getDrawCalls() { return drawCalls; }
+    public int getTriangleCount() { return triangleCount; }
+    public long getBytesUploaded() { return bytesUploaded; }
     public int getCulledChunks() { return culledChunks; }
     
     /** Get shadow renderer for debug visualization. */

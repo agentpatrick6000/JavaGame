@@ -1,0 +1,7 @@
+[2026-02-08T16:22:50.975577Z] [PerfCapture] Starting scenario: HIGH_ALT_FAST_FLIGHT
+[2026-02-08T16:22:50.977155Z] [PerfCapture] Output: artifacts/perf_live/HIGH_ALT_FAST_FLIGHT
+[2026-02-08T16:22:50.977183Z] [PerfCapture] Duration: 30s at 50.0 blocks/sec
+[2026-02-08T16:22:53.573984Z] [PerfCapture] Warmup complete (120 frames)
+[2026-02-08T16:23:23.602755Z] [PerfCapture] Capture complete. 1132 samples collected.
+[2026-02-08T16:23:23.630936Z] [PerfCapture] Saved: artifacts/perf_live/HIGH_ALT_FAST_FLIGHT/perf_samples.csv
+[2026-02-08T16:23:23.632997Z] [PerfCapture] Saved: artifacts/perf_live/HIGH_ALT_FAST_FLIGHT/perf_summary.json

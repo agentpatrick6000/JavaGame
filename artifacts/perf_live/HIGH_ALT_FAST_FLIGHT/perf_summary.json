@@ -1,0 +1,41 @@
+{
+  "git_head_hash": "3d34eb0ae5c83cbb93884f2526e6e359d9086005",
+  "scenario": "HIGH_ALT_FAST_FLIGHT",
+  "duration_seconds": 30,
+  "sample_count": 1132,
+  "flight_speed": 50.0,
+  "flight_altitude": 200.0,
+
+  "frame_time_ms": {
+    "avg": 11.926,
+    "p50": 7.263,
+    "p95": 49.485,
+    "p99": 85.106
+  },
+  "fps_avg": 83.85,
+
+  "cpu_breakdown_avg_ms": {
+    "world": 0.000,
+    "gen": 0.000,
+    "mesh": 0.000,
+    "upload": 0.000,
+    "render_submit": 0.000,
+    "wait": 0.000
+  },
+  "dominant_limiter": "CPU_GEN",
+
+  "chunk_stats": {
+    "max_loaded": 1382,
+    "max_mesh_pending": 46,
+    "max_gen_pending": 8,
+    "max_io_pending": 0
+  },
+
+  "render_stats": {
+    "total_bytes_uploaded": 0,
+    "avg_draw_calls": 428,
+    "avg_triangles": 438688
+  },
+
+  "capture_timestamp": "2026-02-08T16:23:23.632778Z"
+}

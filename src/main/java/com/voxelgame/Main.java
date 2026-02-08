@@ -30,6 +30,9 @@ public class Main {
         String benchOutDir = null;
         boolean lightingTestMode = false;
         String lightingTestOutDir = null;
+        boolean perfCaptureMode = false;
+        String perfCaptureOutDir = null;
+        String perfCaptureScenario = null;
         String directWorldName = null;
         String scriptPath = null;
         String captureOutputDir = null;
@@ -89,6 +92,18 @@ public class Main {
                         lightingTestOutDir = args[++i];
                     }
                 }
+                case "--perf-capture" -> {
+                    perfCaptureMode = true;
+                    directMode = true;
+                    if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
+                        perfCaptureScenario = args[++i];
+                    }
+                }
+                case "--perf-out" -> {
+                    if (i + 1 < args.length) {
+                        perfCaptureOutDir = args[++i];
+                    }
+                }
                 case "--create" -> {
                     createMode = true;
                     directMode = true;
@@ -131,6 +146,8 @@ public class Main {
                     System.out.println("                         (captures all profiles if not specified)");
                     System.out.println("  --bench-world          Run world streaming benchmark (60s flight test)");
                     System.out.println("  --lighting-test [dir]  Run lighting test (captures at NOON/SUNSET/MIDNIGHT)");
+                    System.out.println("  --perf-capture [name]  Run performance capture (30s high-alt fast flight)");
+                    System.out.println("  --perf-out <dir>       Output directory for perf capture");
                     System.out.println("  --help, -h             Show this help message");
                     System.exit(0);
                 }
@@ -144,7 +161,7 @@ public class Main {
         }
 
         // Automation and agent-server modes imply direct mode
-        if (automationMode || agentServerMode || autoTestMode || captureDebugViews || captureSpawnValidation || benchWorldMode || lightingTestMode) {
+        if (automationMode || agentServerMode || autoTestMode || captureDebugViews || captureSpawnValidation || benchWorldMode || lightingTestMode || perfCaptureMode) {
             directMode = true;
         }
 
@@ -184,6 +201,11 @@ public class Main {
         // Set lighting test mode if requested
         if (lightingTestMode) {
             loop.setLightingTest(true, lightingTestOutDir);
+        }
+        
+        // Set perf capture mode if requested
+        if (perfCaptureMode) {
+            loop.setPerfCapture(true, perfCaptureOutDir, perfCaptureScenario);
         }
 
         // Direct/create mode skips the menu

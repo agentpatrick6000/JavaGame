@@ -205,6 +205,12 @@ public class GameLoop {
     private boolean lightingTest = false;
     private String lightingTestOutDir = null;
     private LightingTest lightingTestRunner = null;
+    
+    // Perf capture mode
+    private boolean perfCapture = false;
+    private String perfCaptureOutDir = null;
+    private String perfCaptureScenario = null;
+    private PerfCapture perfCaptureRunner = null;
 
     // Track which world is currently loaded
     private String currentWorldFolder = null;
@@ -272,6 +278,13 @@ public class GameLoop {
     public void setLightingTest(boolean enabled, String outDir) {
         this.lightingTest = enabled;
         this.lightingTestOutDir = outDir;
+    }
+    
+    /** Enable perf capture mode with optional output directory and scenario name. */
+    public void setPerfCapture(boolean enabled, String outDir, String scenario) {
+        this.perfCapture = enabled;
+        this.perfCaptureOutDir = outDir;
+        this.perfCaptureScenario = scenario;
     }
 
     // Track create-new-world mode (--create flag)
@@ -720,6 +733,13 @@ public class GameLoop {
             lightingTestRunner.setReferences(player, worldTime, renderer, postFX, chunkManager, world, 
                 renderer.getSkySystem(), window.getFramebufferWidth(), window.getFramebufferHeight());
         }
+        
+        // Initialize perf capture if enabled
+        if (perfCapture) {
+            String outDir = perfCaptureOutDir != null ? perfCaptureOutDir : "artifacts/perf_live";
+            perfCaptureRunner = new PerfCapture(outDir, perfCaptureScenario);
+            perfCaptureRunner.setReferences(player, worldTime, renderer, chunkManager);
+        }
 
         // Switch to in-game state
         screenState = ScreenState.IN_GAME;
@@ -1028,6 +1048,11 @@ public class GameLoop {
     private void updateAndRenderGame(int w, int h, float dt) {
         if (!gameInitialized) return;
         
+        // Perf capture: mark frame start
+        if (perfCapture && perfCaptureRunner != null) {
+            perfCaptureRunner.beginFrame();
+        }
+        
         Profiler profiler = Profiler.getInstance();
         profiler.begin("Frame");
 
@@ -1319,8 +1344,22 @@ public class GameLoop {
             }
         }
         
+        // Perf capture mode
+        if (perfCapture && perfCaptureRunner != null) {
+            perfCaptureRunner.update(dt);
+            if (perfCaptureRunner.isComplete()) {
+                System.out.println("[PerfCapture] Complete. Exiting.");
+                window.requestClose();
+            }
+        }
+        
         profiler.end("Frame");
         profiler.endFrame();
+        
+        // Perf capture: mark frame end
+        if (perfCapture && perfCaptureRunner != null) {
+            perfCaptureRunner.endFrame();
+        }
     }
 
     // Debug logging timer (logs render params once per second when debug view is active)
