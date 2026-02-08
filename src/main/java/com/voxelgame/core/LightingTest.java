@@ -255,6 +255,7 @@ public class LightingTest {
         }
     }
 
+    // Two-phase capture: even steps = setup mode, odd steps = capture after render
     private void handleCapture() {
         // Keep camera and time fixed
         player.getCamera().getPosition().set(CAM_X, CAM_Y, CAM_Z);
@@ -267,69 +268,100 @@ public class LightingTest {
         String timeName = TIME_NAMES[currentTimeIndex];
         String dir = outputDir + "/" + timeName;
 
-        if (timer < 0.15f) return;
+        // Wait for at least one frame between mode change and capture
+        if (timer < 0.1f) return;
 
         switch (captureStep) {
+            // Step 0: Setup final mode
             case 0 -> {
-                // Final render
                 renderer.setDebugView(0);
                 if (postFX != null) postFX.setCompositeDebugMode(PostFX.COMPOSITE_NORMAL);
+                captureStep++;
+                timer = 0;
+            }
+            // Step 1: Capture final (after render with mode 0)
+            case 1 -> {
                 String path = Screenshot.captureToFile(fbWidth, fbHeight, dir + "/final.png");
                 System.out.println("[LightingTest] Saved: " + path);
                 captureStep++;
                 timer = 0;
             }
-            case 1 -> {
-                // Albedo
+            // Step 2: Setup albedo mode
+            case 2 -> {
                 renderer.setDebugView(1);
+                captureStep++;
+                timer = 0;
+            }
+            // Step 3: Capture albedo
+            case 3 -> {
                 String path = Screenshot.captureToFile(fbWidth, fbHeight, dir + "/albedo.png");
                 System.out.println("[LightingTest] Saved: " + path);
                 captureStep++;
                 timer = 0;
             }
-            case 2 -> {
-                // Lighting only
+            // Step 4: Setup lighting mode
+            case 4 -> {
                 renderer.setDebugView(2);
+                captureStep++;
+                timer = 0;
+            }
+            // Step 5: Capture lighting
+            case 5 -> {
                 String path = Screenshot.captureToFile(fbWidth, fbHeight, dir + "/lighting.png");
                 System.out.println("[LightingTest] Saved: " + path);
                 captureStep++;
                 timer = 0;
             }
-            case 3 -> {
-                // Depth
+            // Step 6: Setup depth mode
+            case 6 -> {
                 renderer.setDebugView(3);
+                captureStep++;
+                timer = 0;
+            }
+            // Step 7: Capture depth
+            case 7 -> {
                 String path = Screenshot.captureToFile(fbWidth, fbHeight, dir + "/depth.png");
                 System.out.println("[LightingTest] Saved: " + path);
                 captureStep++;
                 timer = 0;
             }
-            case 4 -> {
-                // HDR pre-tonemap
+            // Step 8: Setup HDR pre-tonemap mode
+            case 8 -> {
                 renderer.setDebugView(0);
                 if (postFX != null) postFX.setCompositeDebugMode(PostFX.COMPOSITE_HDR_PRE_TONEMAP);
+                captureStep++;
+                timer = 0;
+            }
+            // Step 9: Capture HDR pre-tonemap
+            case 9 -> {
                 String path = Screenshot.captureToFile(fbWidth, fbHeight, dir + "/hdr_pre_tonemap.png");
                 System.out.println("[LightingTest] Saved: " + path);
                 captureStep++;
                 timer = 0;
             }
-            case 5 -> {
-                // LDR post-tonemap
+            // Step 10: Setup LDR post-tonemap mode
+            case 10 -> {
                 renderer.setDebugView(0);
                 if (postFX != null) postFX.setCompositeDebugMode(PostFX.COMPOSITE_LDR_POST_TONEMAP);
+                captureStep++;
+                timer = 0;
+            }
+            // Step 11: Capture LDR post-tonemap
+            case 11 -> {
                 String path = Screenshot.captureToFile(fbWidth, fbHeight, dir + "/ldr_post_tonemap.png");
                 System.out.println("[LightingTest] Saved: " + path);
                 captureStep++;
                 timer = 0;
             }
-            case 6 -> {
-                // Reset modes
+            // Step 12: Finalize - reset modes, read probe, save state
+            case 12 -> {
                 renderer.setDebugView(0);
                 if (postFX != null) postFX.setCompositeDebugMode(PostFX.COMPOSITE_NORMAL);
 
                 // Read center pixel (probe)
                 readCenterPixel();
 
-                // Save render_state.json with lighting data
+                // Save render_state.json with lighting data and uniform audit
                 saveRenderState(dir);
 
                 phase = PHASE_NEXT_TIME;
@@ -459,6 +491,9 @@ public class LightingTest {
             json.append("    \"block_light_contrib\": 0.0\n");
             json.append("  },\n");
 
+            // Uniform audit from renderer
+            json.append("  \"shader_uniform_audit\": ").append(renderer.getUniformAuditJson()).append(",\n");
+            
             // Timestamp
             json.append("  \"capture_timestamp\": \"").append(Instant.now().toString()).append("\"\n");
             json.append("}\n");

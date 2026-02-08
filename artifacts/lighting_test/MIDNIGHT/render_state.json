@@ -1,5 +1,5 @@
 {
-  "git_head_hash": "068218b66ad457c1080a8703ef6d57181e0bce09",
+  "git_head_hash": "fd619a13dc09beb7ba554423582b1cb27f6593d4",
   "time_of_day_name": "MIDNIGHT",
   "time_of_day_ticks": 18000,
   "time_normalized": 0.0,
@@ -35,5 +35,40 @@
     "shadow_factor": 1.0,
     "block_light_contrib": 0.0
   },
-  "capture_timestamp": "2026-02-08T15:28:32.301853Z"
+  "shader_uniform_audit": {
+    "program_id": 21,
+    "uniform_locations": {
+      "uSkyIntensity": 23,
+      "uSunIntensity": 40,
+      "uSunDirection": 17,
+      "uSunColor": 24,
+      "uSkyZenithColor": 20,
+      "uSkyHorizonColor": 4,
+      "uDebugView": 25,
+      "uFogMode": 21,
+      "uShadowsEnabled": 10
+    },
+    "uniform_values_readback": {
+      "uSkyIntensity": 0.020000057,
+      "uSunIntensity": 0.0,
+      "uSunDirection": [-5.2356086E-4, -0.9999999, 0.0],
+      "uSunColor": [3.3321095E-7, 2.3324766E-7, 9.996329E-8],
+      "uSkyZenithColor": [0.02000011, 0.020000076, 0.080000155],
+      "uSkyHorizonColor": [0.050000302, 0.05000017, 0.10000007],
+      "uDebugView": 0,
+      "uFogMode": 0,
+      "uShadowsEnabled": 0
+    },
+    "values_set_this_frame": {
+      "skyIntensity": 0.020000057,
+      "sunIntensity": 0.0,
+      "sunDirection": [-5.2356086E-4, -0.9999999, 0.0],
+      "sunColor": [3.3321095E-7, 2.3324766E-7, 9.996329E-8],
+      "zenithColor": [0.02000011, 0.020000076, 0.080000155],
+      "horizonColor": [0.050000302, 0.05000017, 0.10000007],
+      "debugView": 0,
+      "fogMode": 0
+    }
+  },
+  "capture_timestamp": "2026-02-08T15:40:06.203874Z"
 }

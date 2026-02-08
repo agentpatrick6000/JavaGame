@@ -120,4 +120,36 @@ public class Shader {
     }
 
     public int getProgramId() { return programId; }
+    
+    /** Get uniform location (for audit/debug). Returns -1 if not found. */
+    public int queryUniformLocation(String name) {
+        return glGetUniformLocation(programId, name);
+    }
+    
+    /** Get current float uniform value (for audit). Requires program to be bound. */
+    public float getUniformFloat(String name) {
+        int loc = getUniformLocation(name);
+        if (loc < 0) return Float.NaN;
+        float[] val = new float[1];
+        glGetUniformfv(programId, loc, val);
+        return val[0];
+    }
+    
+    /** Get current vec3 uniform value (for audit). Requires program to be bound. */
+    public float[] getUniformVec3(String name) {
+        int loc = getUniformLocation(name);
+        if (loc < 0) return new float[]{Float.NaN, Float.NaN, Float.NaN};
+        float[] val = new float[3];
+        glGetUniformfv(programId, loc, val);
+        return val;
+    }
+    
+    /** Get current int uniform value (for audit). Requires program to be bound. */
+    public int getUniformInt(String name) {
+        int loc = getUniformLocation(name);
+        if (loc < 0) return -999;
+        int[] val = new int[1];
+        glGetUniformiv(programId, loc, val);
+        return val[0];
+    }
 }

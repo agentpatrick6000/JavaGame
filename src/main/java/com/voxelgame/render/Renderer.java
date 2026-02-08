@@ -455,6 +455,65 @@ public class Renderer {
     
     /** Get sky system for lighting probes. */
     public SkySystem getSkySystem() { return skySystem; }
+    
+    /** Get block shader for uniform audit. */
+    public Shader getBlockShader() { return blockShader; }
+    
+    /** Get current uniform values for audit (captures what was last set). */
+    public String getUniformAuditJson() {
+        if (blockShader == null) return "{}";
+        
+        blockShader.bind();
+        
+        StringBuilder json = new StringBuilder();
+        json.append("{\n");
+        json.append("    \"program_id\": ").append(blockShader.getProgramId()).append(",\n");
+        
+        // Uniform locations
+        json.append("    \"uniform_locations\": {\n");
+        json.append("      \"uSkyIntensity\": ").append(blockShader.queryUniformLocation("uSkyIntensity")).append(",\n");
+        json.append("      \"uSunIntensity\": ").append(blockShader.queryUniformLocation("uSunIntensity")).append(",\n");
+        json.append("      \"uSunDirection\": ").append(blockShader.queryUniformLocation("uSunDirection")).append(",\n");
+        json.append("      \"uSunColor\": ").append(blockShader.queryUniformLocation("uSunColor")).append(",\n");
+        json.append("      \"uSkyZenithColor\": ").append(blockShader.queryUniformLocation("uSkyZenithColor")).append(",\n");
+        json.append("      \"uSkyHorizonColor\": ").append(blockShader.queryUniformLocation("uSkyHorizonColor")).append(",\n");
+        json.append("      \"uDebugView\": ").append(blockShader.queryUniformLocation("uDebugView")).append(",\n");
+        json.append("      \"uFogMode\": ").append(blockShader.queryUniformLocation("uFogMode")).append(",\n");
+        json.append("      \"uShadowsEnabled\": ").append(blockShader.queryUniformLocation("uShadowsEnabled")).append("\n");
+        json.append("    },\n");
+        
+        // Uniform values (readback)
+        json.append("    \"uniform_values_readback\": {\n");
+        json.append("      \"uSkyIntensity\": ").append(blockShader.getUniformFloat("uSkyIntensity")).append(",\n");
+        json.append("      \"uSunIntensity\": ").append(blockShader.getUniformFloat("uSunIntensity")).append(",\n");
+        float[] sunDir = blockShader.getUniformVec3("uSunDirection");
+        json.append("      \"uSunDirection\": [").append(sunDir[0]).append(", ").append(sunDir[1]).append(", ").append(sunDir[2]).append("],\n");
+        float[] sunColor = blockShader.getUniformVec3("uSunColor");
+        json.append("      \"uSunColor\": [").append(sunColor[0]).append(", ").append(sunColor[1]).append(", ").append(sunColor[2]).append("],\n");
+        float[] zenith = blockShader.getUniformVec3("uSkyZenithColor");
+        json.append("      \"uSkyZenithColor\": [").append(zenith[0]).append(", ").append(zenith[1]).append(", ").append(zenith[2]).append("],\n");
+        float[] horizon = blockShader.getUniformVec3("uSkyHorizonColor");
+        json.append("      \"uSkyHorizonColor\": [").append(horizon[0]).append(", ").append(horizon[1]).append(", ").append(horizon[2]).append("],\n");
+        json.append("      \"uDebugView\": ").append(blockShader.getUniformInt("uDebugView")).append(",\n");
+        json.append("      \"uFogMode\": ").append(blockShader.getUniformInt("uFogMode")).append(",\n");
+        json.append("      \"uShadowsEnabled\": ").append(blockShader.getUniformInt("uShadowsEnabled")).append("\n");
+        json.append("    },\n");
+        
+        // Values set this frame (from member fields)
+        json.append("    \"values_set_this_frame\": {\n");
+        json.append("      \"skyIntensity\": ").append(skyIntensity).append(",\n");
+        json.append("      \"sunIntensity\": ").append(sunIntensity).append(",\n");
+        json.append("      \"sunDirection\": [").append(sunDirection[0]).append(", ").append(sunDirection[1]).append(", ").append(sunDirection[2]).append("],\n");
+        json.append("      \"sunColor\": [").append(sunColor[0]).append(", ").append(sunColor[1]).append(", ").append(sunColor[2]).append("],\n");
+        json.append("      \"zenithColor\": [").append(zenithColor[0]).append(", ").append(zenithColor[1]).append(", ").append(zenithColor[2]).append("],\n");
+        json.append("      \"horizonColor\": [").append(horizonColor[0]).append(", ").append(horizonColor[1]).append(", ").append(horizonColor[2]).append("],\n");
+        json.append("      \"debugView\": ").append(debugView).append(",\n");
+        json.append("      \"fogMode\": ").append(fogMode).append("\n");
+        json.append("    }\n");
+        json.append("  }");
+        
+        return json.toString();
+    }
 
     /**
      * Phase 5: Render shadow pass for all cascades.
