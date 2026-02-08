@@ -1,5 +1,6 @@
 package com.voxelgame.world.stream;
 
+import com.voxelgame.core.Profiler;
 import com.voxelgame.render.SkySystem;
 import com.voxelgame.render.TextureAtlas;
 import com.voxelgame.save.SaveManager;
@@ -158,6 +159,8 @@ public class ChunkManager {
     }
 
     public void update(Player player) {
+        Profiler profiler = Profiler.getInstance();
+        
         int pcx = (int) Math.floor(player.getPosition().x / WorldConstants.CHUNK_SIZE);
         int pcz = (int) Math.floor(player.getPosition().z / WorldConstants.CHUNK_SIZE);
         frameCount++;
@@ -173,14 +176,22 @@ public class ChunkManager {
         }
 
         // 1. Process completed chunk generations
+        profiler.begin("CM/GenComplete");
         processCompletedGenerations();
+        profiler.end("CM/GenComplete");
 
         // 2. Upload completed meshes to GPU (limited per frame)
+        profiler.begin("CM/MeshUpload");
         processMeshUploads();
+        profiler.end("CM/MeshUpload");
+        
+        profiler.begin("CM/LODUpload");
         processLODMeshUploads();
+        profiler.end("CM/LODUpload");
 
         // 3. Rebuild dirty chunks (block changes) — only for close chunks
         // ASYNC FIX: Submit to mesh pool instead of blocking main thread
+        profiler.begin("CM/DirtyRebuild");
         int dirtyRebuilds = 0;
         for (Chunk chunk : world.getLoadedChunks()) {
             if (chunk.isDirty() && chunk.getMesh() != null &&
@@ -194,17 +205,22 @@ public class ChunkManager {
                 }
             }
         }
+        profiler.end("CM/DirtyRebuild");
 
         // 4. Update LOD levels for loaded chunks (every 15 frames for responsive transitions)
         if (frameCount % 15 == 0) {
+            profiler.begin("CM/LODUpdate");
             updateLODLevels(pcx, pcz);
+            profiler.end("CM/LODUpdate");
         }
 
         // 5. Update probe manager player position and dirty probes
+        profiler.begin("CM/Probes");
         if (probeManager != null) {
             probeManager.updatePlayerPosition(player.getPosition().x, player.getPosition().z);
             probeManager.updateDirtyProbes(world, currentTimeOfDay);
         }
+        profiler.end("CM/Probes");
 
         boolean playerMovedChunk = (pcx != lastPlayerCX || pcz != lastPlayerCZ);
         if (playerMovedChunk) {
@@ -212,16 +228,22 @@ public class ChunkManager {
             lastPlayerCZ = pcz;
 
             // 5. Unload far chunks FIRST to free space before loading new ones
+            profiler.begin("CM/Unload");
             unloadDistantChunks(pcx, pcz);
+            profiler.end("CM/Unload");
 
             // 6. Enforce hard chunk cap — aggressively unload farthest if over limit
+            profiler.begin("CM/CapEnforce");
             enforceChunkCap(pcx, pcz);
+            profiler.end("CM/CapEnforce");
         }
 
         // 7. Request chunks every frame (budget-limited) until world is filled.
         // This ensures continuous loading rather than only on chunk crossings.
         if (world.getChunkMap().size() + pendingGen.size() < lodConfig.getMaxLoadedChunks()) {
+            profiler.begin("CM/Request");
             requestChunks(pcx, pcz);
+            profiler.end("CM/Request");
         }
     }
 

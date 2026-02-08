@@ -211,6 +211,13 @@ public class GameLoop {
     private String perfCaptureOutDir = null;
     private String perfCaptureScenario = null;
     private PerfCapture perfCaptureRunner = null;
+    
+    // Perf snapshot mode (minimal profiler dump)
+    private boolean perfSnapshot = false;
+    private int perfSnapshotSeconds = 10;
+    private String perfSnapshotOutDir = null;
+    private String perfSnapshotScenario = "HIGH_ALT";
+    private PerfSnapshot perfSnapshotRunner = null;
 
     // Track which world is currently loaded
     private String currentWorldFolder = null;
@@ -285,6 +292,14 @@ public class GameLoop {
         this.perfCapture = enabled;
         this.perfCaptureOutDir = outDir;
         this.perfCaptureScenario = scenario;
+    }
+    
+    /** Enable perf snapshot mode (minimal profiler dump for regression hunting). */
+    public void setPerfSnapshot(boolean enabled, int seconds, String outDir, String scenario) {
+        this.perfSnapshot = enabled;
+        this.perfSnapshotSeconds = seconds;
+        this.perfSnapshotOutDir = outDir;
+        this.perfSnapshotScenario = scenario != null ? scenario : "HIGH_ALT";
     }
 
     // Track create-new-world mode (--create flag)
@@ -739,6 +754,17 @@ public class GameLoop {
             String outDir = perfCaptureOutDir != null ? perfCaptureOutDir : "artifacts/perf_live";
             perfCaptureRunner = new PerfCapture(outDir, perfCaptureScenario);
             perfCaptureRunner.setReferences(player, worldTime, renderer, chunkManager);
+        }
+        
+        // Initialize perf snapshot if enabled
+        if (perfSnapshot) {
+            String outDir = perfSnapshotOutDir != null ? perfSnapshotOutDir : "perf";
+            PerfSnapshot.Scenario scenario = perfSnapshotScenario.equals("GROUND") 
+                ? PerfSnapshot.Scenario.GROUND 
+                : PerfSnapshot.Scenario.HIGH_ALT;
+            perfSnapshotRunner = new PerfSnapshot(perfSnapshotSeconds, scenario, outDir);
+            perfSnapshotRunner.setReferences(player, worldTime, renderer, chunkManager);
+            perfSnapshotRunner.start();
         }
 
         // Switch to in-game state
@@ -1349,6 +1375,15 @@ public class GameLoop {
             perfCaptureRunner.update(dt);
             if (perfCaptureRunner.isComplete()) {
                 System.out.println("[PerfCapture] Complete. Exiting.");
+                window.requestClose();
+            }
+        }
+        
+        // Perf snapshot mode
+        if (perfSnapshot && perfSnapshotRunner != null) {
+            perfSnapshotRunner.update(dt);
+            if (perfSnapshotRunner.isComplete()) {
+                System.out.println("[PerfSnapshot] Complete. Exiting.");
                 window.requestClose();
             }
         }

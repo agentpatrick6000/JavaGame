@@ -33,6 +33,11 @@ public class Main {
         boolean perfCaptureMode = false;
         String perfCaptureOutDir = null;
         String perfCaptureScenario = null;
+        // Perf snapshot: minimal profiler dump for regression hunting
+        boolean perfSnapshotMode = false;
+        int perfSnapshotSeconds = 10;
+        String perfSnapshotOutDir = null;
+        String perfSnapshotScenario = "HIGH_ALT"; // or "GROUND"
         String directWorldName = null;
         String scriptPath = null;
         String captureOutputDir = null;
@@ -104,6 +109,29 @@ public class Main {
                         perfCaptureOutDir = args[++i];
                     }
                 }
+                case "--perf-snapshot" -> {
+                    perfSnapshotMode = true;
+                    directMode = true;
+                    // Required: duration in seconds
+                    if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
+                        try {
+                            perfSnapshotSeconds = Integer.parseInt(args[++i]);
+                        } catch (NumberFormatException e) {
+                            System.err.println("--perf-snapshot requires a number of seconds");
+                            System.exit(1);
+                        }
+                    }
+                }
+                case "--perf-snapshot-out" -> {
+                    if (i + 1 < args.length) {
+                        perfSnapshotOutDir = args[++i];
+                    }
+                }
+                case "--perf-snapshot-scenario" -> {
+                    if (i + 1 < args.length) {
+                        perfSnapshotScenario = args[++i].toUpperCase();
+                    }
+                }
                 case "--create" -> {
                     createMode = true;
                     directMode = true;
@@ -161,7 +189,7 @@ public class Main {
         }
 
         // Automation and agent-server modes imply direct mode
-        if (automationMode || agentServerMode || autoTestMode || captureDebugViews || captureSpawnValidation || benchWorldMode || lightingTestMode || perfCaptureMode) {
+        if (automationMode || agentServerMode || autoTestMode || captureDebugViews || captureSpawnValidation || benchWorldMode || lightingTestMode || perfCaptureMode || perfSnapshotMode) {
             directMode = true;
         }
 
@@ -206,6 +234,11 @@ public class Main {
         // Set perf capture mode if requested
         if (perfCaptureMode) {
             loop.setPerfCapture(true, perfCaptureOutDir, perfCaptureScenario);
+        }
+        
+        // Set perf snapshot mode if requested
+        if (perfSnapshotMode) {
+            loop.setPerfSnapshot(true, perfSnapshotSeconds, perfSnapshotOutDir, perfSnapshotScenario);
         }
 
         // Direct/create mode skips the menu
